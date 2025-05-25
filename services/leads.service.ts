@@ -52,18 +52,20 @@ export interface Assignee {
   avatar_url?: string | null;
 }
 
-// Lead status options with labels
+// Lead status options with labels and API names
 export const LEAD_STATUSES = {
-  1: 'Pending',
-  2: 'Finished',
-  3: 'Contacted',
-  4: 'Waiting for Recall',
-  5: 'Interview Arranged',
-  6: 'Not Interested',
+  1: { label: 'Pending', apiName: 'pending' },
+  2: { label: 'Lead Assigned', apiName: 'lead_assigned' },
+  3: { label: 'Lead Contacted', apiName: 'lead_contacted' },
+  4: { label: 'Waiting Recall', apiName: 'waiting_recall' },
+  5: { label: 'Interview Arranged', apiName: 'interview_arranged' },
+  6: { label: 'Finished', apiName: 'finished' },
 } as const;
 
 export type LeadStatusNumber = keyof typeof LEAD_STATUSES;
-export type LeadStatusLabel = (typeof LEAD_STATUSES)[LeadStatusNumber];
+export type LeadStatusLabel = (typeof LEAD_STATUSES)[LeadStatusNumber]['label'];
+export type LeadStatusApiName =
+  (typeof LEAD_STATUSES)[LeadStatusNumber]['apiName'];
 
 export class LeadsService {
   /**
@@ -167,6 +169,42 @@ export class LeadsService {
   }
 
   /**
+   * Change lead status using the specific endpoint
+   * POST /lead/{lead.id}/change_status/{status.name}
+   */
+  static async changeLeadStatus(
+    leadId: number,
+    statusNumber: LeadStatusNumber
+  ): Promise<Lead> {
+    try {
+      // Get the API name for the status
+      const statusApiName = LEAD_STATUSES[statusNumber].apiName;
+
+      const response = await fetchApi<{ data: Lead; message: string }>(
+        `/lead/${leadId}/change_status/${statusApiName}`,
+        {
+          method: 'POST',
+        }
+      );
+
+      console.log('Change lead status response:', response);
+
+      if (!response.ok) {
+        throw new ApiError('Failed to change lead status', response.statusCode);
+      }
+
+      return response.result.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to change lead status'
+      );
+    }
+  }
+
+  /**
    * Update lead with any field(s)
    * Uses POST with _method: PUT pattern
    */
@@ -202,7 +240,8 @@ export class LeadsService {
   }
 
   /**
-   * Update lead status (using status number)
+   * Update lead status (using status number) - Legacy method
+   * @deprecated Use changeLeadStatus instead
    */
   static async updateLeadStatus(
     leadId: number,
@@ -274,6 +313,7 @@ export class LeadsService {
 
   /**
    * Assign lead to user
+   * POST /lead/{lead.id}/assign/{profile.id}
    */
   static async assignLead(leadId: number, profileId: number): Promise<Lead> {
     try {
@@ -297,6 +337,36 @@ export class LeadsService {
       }
       throw new ApiError(
         error instanceof Error ? error.message : 'Failed to assign lead'
+      );
+    }
+  }
+
+  /**
+   * Send manual notification to assignee
+   * POST /lead/{lead.id}/notify_assignee
+   */
+  static async notifyAssignee(leadId: number): Promise<{ message: string }> {
+    try {
+      const response = await fetchApi<{ message: string }>(
+        `/lead/${leadId}/notify_assignee`,
+        {
+          method: 'POST',
+        }
+      );
+
+      console.log('Notify assignee response:', response);
+
+      if (!response.ok) {
+        throw new ApiError('Failed to notify assignee', response.statusCode);
+      }
+
+      return response.result;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to notify assignee'
       );
     }
   }
@@ -331,35 +401,6 @@ export class LeadsService {
       }
       throw new ApiError(
         error instanceof Error ? error.message : 'Failed to create lead'
-      );
-    }
-  }
-
-  /**
-   * Send manual notification to assignee
-   */
-  static async notifyAssignee(leadId: number): Promise<{ message: string }> {
-    try {
-      const response = await fetchApi<{ message: string }>(
-        `/lead/${leadId}/notify_assignee`,
-        {
-          method: 'POST',
-        }
-      );
-
-      console.log('Notify assignee response:', response);
-
-      if (!response.ok) {
-        throw new ApiError('Failed to notify assignee', response.statusCode);
-      }
-
-      return response.result;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError(
-        error instanceof Error ? error.message : 'Failed to notify assignee'
       );
     }
   }
@@ -439,7 +480,14 @@ export class LeadsService {
    * Helper function to get status label from number
    */
   static getStatusLabel(statusNumber: LeadStatusNumber): LeadStatusLabel {
-    return LEAD_STATUSES[statusNumber];
+    return LEAD_STATUSES[statusNumber].label;
+  }
+
+  /**
+   * Helper function to get status API name from number
+   */
+  static getStatusApiName(statusNumber: LeadStatusNumber): LeadStatusApiName {
+    return LEAD_STATUSES[statusNumber].apiName;
   }
 
   /**
@@ -447,7 +495,7 @@ export class LeadsService {
    */
   static getStatusNumber(label: LeadStatusLabel): LeadStatusNumber {
     const entry = Object.entries(LEAD_STATUSES).find(
-      ([_, value]) => value === label
+      ([_, value]) => value.label === label
     );
     return entry ? (Number(entry[0]) as LeadStatusNumber) : 1;
   }
@@ -458,10 +506,12 @@ export class LeadsService {
   static getAllStatuses(): Array<{
     number: LeadStatusNumber;
     label: LeadStatusLabel;
+    apiName: LeadStatusApiName;
   }> {
-    return Object.entries(LEAD_STATUSES).map(([number, label]) => ({
+    return Object.entries(LEAD_STATUSES).map(([number, status]) => ({
       number: Number(number) as LeadStatusNumber,
-      label: label as LeadStatusLabel,
+      label: status.label,
+      apiName: status.apiName,
     }));
   }
 }

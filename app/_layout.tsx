@@ -1,20 +1,94 @@
 // app/_layout.tsx
 import AuthProvider from '@/providers/auth-provider';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useAuth } from '@/providers/auth-provider';
+import { useEffect, useState } from 'react';
+import { fetchApi } from '@/utils/api';
+
+function RootLayoutNav() {
+  const { authState } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+  const [isCheckingProfile, setIsCheckingProfile] = useState(false);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
+
+  const checkProfile = async () => {
+    if (!authState.isAuthenticated || isCheckingProfile) return;
+
+    setIsCheckingProfile(true);
+
+    try {
+      const response = await fetchApi('/profile/me', {
+        method: 'GET',
+      });
+
+      if (response.ok && response.statusCode !== 401) {
+        // Profile check successful, redirect to home if not already there
+        const inAppGroup = segments[0] === '(app)';
+        if (!inAppGroup) {
+          console.log('Ovde');
+          router.replace('/(app)/home');
+        }
+      } else {
+        // Profile check failed (401 or other error), redirect to index
+        const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+        if (!inAuthGroup) {
+          router.replace('/');
+        }
+      }
+    } catch (error) {
+      console.error('Profile check error:', error);
+      // On error, redirect to index page
+      const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+      if (!inAuthGroup) {
+        router.replace('/');
+      }
+    } finally {
+      setIsCheckingProfile(false);
+      setInitialCheckDone(true);
+    }
+  };
+
+  useEffect(() => {
+    // Wait for auth provider to finish loading
+    if (authState.loading) return;
+
+    // Only check profile if user is authenticated
+    if (authState.isAuthenticated && authState.user) {
+      checkProfile();
+    } else {
+      // No authentication, ensure user is on auth pages
+      const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+      if (!inAuthGroup) {
+        router.replace('/');
+      }
+      setInitialCheckDone(true);
+    }
+  }, [authState.isAuthenticated, authState.loading, segments]);
+
+  // Don't render navigation until auth state is loaded and initial check is done
+  if (authState.loading || !initialCheckDone) {
+    return null; // Or a loading screen component
+  }
+
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(app)" options={{ headerShown: false }} />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <SafeAreaProvider style={styles.container}>
         <StatusBar style="auto" />
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        </Stack>
+        <RootLayoutNav />
       </SafeAreaProvider>
     </AuthProvider>
   );

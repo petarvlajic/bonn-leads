@@ -60,22 +60,30 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
   const getStatusColor = (status: string | number) => {
     // Handle both string and number status
-    const statusStr =
-      typeof status === 'number'
-        ? LEAD_STATUSES[status as LeadStatusNumber]?.toLowerCase()
-        : status.toLowerCase();
+    let statusStr: string;
+
+    if (typeof status === 'number') {
+      const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
+      statusStr = statusObj ? statusObj.label.toLowerCase() : 'unknown';
+    } else {
+      statusStr = status.toLowerCase();
+    }
 
     switch (statusStr) {
       case 'pending':
         return '#FFC107'; // Yellow
       case 'finished':
         return colors.success || '#28A745'; // Green
+      case 'lead contacted':
       case 'contacted':
         return '#17A2B8'; // Blue
+      case 'waiting recall':
       case 'waiting for recall':
         return '#FD7E14'; // Orange
       case 'interview arranged':
         return '#6F42C1'; // Purple
+      case 'lead assigned':
+        return '#007BFF'; // Blue
       case 'not interested':
         return colors.error || '#DC3545'; // Red
       default:
@@ -85,7 +93,8 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
   const getStatusLabel = (status: string | number): string => {
     if (typeof status === 'number') {
-      return LEAD_STATUSES[status as LeadStatusNumber] || 'Unknown';
+      const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
+      return statusObj ? statusObj.label : 'Unknown';
     }
     return status;
   };
@@ -178,9 +187,10 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.statusList}>
-              {Object.entries(LEAD_STATUSES).map(([number, label]) => {
+              {Object.entries(LEAD_STATUSES).map(([number, statusObj]) => {
                 const statusNumber = Number(number) as LeadStatusNumber;
-                const isCurrentStatus = getStatusLabel(lead.status) === label;
+                const currentStatusLabel = getStatusLabel(lead.status);
+                const isCurrentStatus = currentStatusLabel === statusObj.label;
 
                 return (
                   <TouchableOpacity
@@ -204,7 +214,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                           isCurrentStatus && styles.statusLabelActive,
                         ]}
                       >
-                        {label}
+                        {statusObj.label}
                       </Text>
                     </View>
                     {isCurrentStatus && (

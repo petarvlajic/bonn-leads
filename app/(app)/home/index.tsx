@@ -287,21 +287,24 @@ export default function AdminDashboardScreen() {
   };
 
   // Handle status change
+  // Handle status change
   const handleStatusChange = async (
     leadId: number,
     statusNumber: LeadStatusNumber
   ) => {
     try {
-      // Optimistic update - convert status number to label for display
+      // Get the status label for display
       const statusLabel = LeadsService.getStatusLabel(statusNumber);
+
+      // Optimistic update
       setLeads((prevLeads) =>
         prevLeads.map((lead) =>
           lead.id === leadId ? { ...lead, status: statusLabel } : lead
         )
       );
 
-      // API call with status number
-      await LeadsService.updateLeadStatus(leadId, statusNumber);
+      // API call with status number (method will convert to API name internally)
+      await LeadsService.changeLeadStatus(leadId, statusNumber);
 
       // Show success message
       Alert.alert('Success', `Status updated to "${statusLabel}"`);
@@ -313,7 +316,6 @@ export default function AdminDashboardScreen() {
       fetchLeads(1, true);
     }
   };
-
   const handleToggleExpand = (leadId: number) => {
     setExpandedLeadId(expandedLeadId === leadId ? null : leadId);
   };
@@ -451,11 +453,11 @@ export default function AdminDashboardScreen() {
             onPress={() => setSelectedStatus('All Status')}
           >
             <Text
-              style={[
-                styles.statusFilterText,
-                selectedStatus === 'All Status' &&
-                  styles.statusFilterTextActive,
-              ]}
+              style={
+                [
+                  /* styles */
+                ]
+              }
             >
               All Status
             </Text>
@@ -469,12 +471,51 @@ export default function AdminDashboardScreen() {
             onPress={() => setSelectedStatus('Pending')}
           >
             <Text
-              style={[
-                styles.statusFilterText,
-                selectedStatus === 'Pending' && styles.statusFilterTextActive,
-              ]}
+              style={
+                [
+                  /* styles */
+                ]
+              }
             >
               Pending
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.statusFilterButton,
+              selectedStatus === 'Lead Assigned' &&
+                styles.statusFilterButtonActive,
+            ]}
+            onPress={() => setSelectedStatus('Lead Assigned')}
+          >
+            <Text
+              style={
+                [
+                  /* styles */
+                ]
+              }
+            >
+              Lead Assigned
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.statusFilterButton,
+              selectedStatus === 'Lead Contacted' &&
+                styles.statusFilterButtonActive,
+            ]}
+            onPress={() => setSelectedStatus('Lead Contacted')}
+          >
+            <Text
+              style={
+                [
+                  /* styles */
+                ]
+              }
+            >
+              Lead Contacted
             </Text>
           </TouchableOpacity>
 
@@ -486,29 +527,13 @@ export default function AdminDashboardScreen() {
             onPress={() => setSelectedStatus('Finished')}
           >
             <Text
-              style={[
-                styles.statusFilterText,
-                selectedStatus === 'Finished' && styles.statusFilterTextActive,
-              ]}
+              style={
+                [
+                  /* styles */
+                ]
+              }
             >
               Finished
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'Contacted' && styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('Contacted')}
-          >
-            <Text
-              style={[
-                styles.statusFilterText,
-                selectedStatus === 'Contacted' && styles.statusFilterTextActive,
-              ]}
-            >
-              Contacted
             </Text>
           </TouchableOpacity>
         </View>
