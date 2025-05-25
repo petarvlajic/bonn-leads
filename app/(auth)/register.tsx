@@ -1,5 +1,4 @@
-// @ts-nocheck
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,32 +20,72 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const { authState, register } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleRegister = async () => {
+  const { authState, register, clearError } = useAuth();
+
+  // Clear error when component mounts or when user starts typing
+  useEffect(() => {
+    if (authState.error) {
+      clearError();
+    }
+  }, [email, password, confirmPassword]);
+
+  // Show error alert when error occurs
+  useEffect(() => {
+    if (authState.error && !authState.loading && !isSubmitting) {
+      Alert.alert('Registration Failed', authState.error);
+    }
+  }, [authState.error, authState.loading, isSubmitting]);
+
+  const validateForm = () => {
     // Basic validation
     if (!email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
-      return;
+      return false;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+
+    // Password length validation
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return false;
+    }
+
+    // Password match validation
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleRegister = async () => {
+    if (!validateForm()) {
       return;
     }
 
-    // Attempt registration
-    await register({ email }, password);
+    setIsSubmitting(true);
 
-    if (authState.error) {
-      Alert.alert('Error', authState.error);
-    }
+    // Call the register function with email, password, and confirmPassword (rpassword)
+    await register(email, password, confirmPassword);
+
+    setIsSubmitting(false);
+
+    // If we reach here and there's no error, registration was successful
+    // Navigation is handled automatically in the auth provider
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Register" showBackButton />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -65,6 +104,9 @@ export default function RegisterScreen() {
               placeholder="name@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              editable={!authState.loading}
             />
 
             <Input
@@ -73,6 +115,9 @@ export default function RegisterScreen() {
               onChangeText={setPassword}
               placeholder="••••••••"
               secureTextEntry
+              autoComplete="new-password"
+              textContentType="newPassword"
+              editable={!authState.loading}
             />
 
             <Input
@@ -81,13 +126,17 @@ export default function RegisterScreen() {
               onChangeText={setConfirmPassword}
               placeholder="••••••••"
               secureTextEntry
+              autoComplete="new-password"
+              textContentType="newPassword"
+              editable={!authState.loading}
             />
 
             <Button
               title="Register"
               onPress={handleRegister}
-              isLoading={authState.loading}
+              isLoading={authState.loading || isSubmitting}
               style={styles.registerButton}
+              disabled={authState.loading || isSubmitting}
             />
           </View>
         </Card>
@@ -95,8 +144,15 @@ export default function RegisterScreen() {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
           <Link href="/(auth)/login" asChild>
-            <TouchableOpacity>
-              <Text style={styles.loginLink}>Login</Text>
+            <TouchableOpacity disabled={authState.loading || isSubmitting}>
+              <Text
+                style={[
+                  styles.loginLink,
+                  (authState.loading || isSubmitting) && styles.linkDisabled,
+                ]}
+              >
+                Login
+              </Text>
             </TouchableOpacity>
           </Link>
         </View>
@@ -120,7 +176,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSizes.xxl,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.bold as any,
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
@@ -149,6 +205,9 @@ const styles = StyleSheet.create({
   loginLink: {
     fontSize: fontSizes.md,
     color: colors.primary,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.medium as any,
+  },
+  linkDisabled: {
+    opacity: 0.5,
   },
 });

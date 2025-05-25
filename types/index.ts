@@ -4,9 +4,10 @@
 // Auth types
 export interface User {
   id: string;
+  profileId?: string; // Add profile ID for API calls
+  email: string;
   firstName: string;
   lastName: string;
-  email: string;
   phoneNumber: string;
   role: 'Admin' | 'Agent' | 'User';
   profileImage?: string;
@@ -21,16 +22,6 @@ export interface AuthState {
 
 // Lead types
 export type LeadStatus = 'Pending' | 'Finished';
-
-export interface Lead {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
-  status: LeadStatus;
-  assignedTo: string | null; // userId or null if unassigned
-  assignedToName?: string;
-}
 
 // UI Component types
 export interface ButtonProps {
@@ -81,4 +72,67 @@ export interface AppHeaderProps {
   title: string;
   showBackButton?: boolean;
   rightComponent?: React.ReactNode;
+}
+
+// Updated Lead interface to match API response
+export interface Lead {
+  id: number;
+  type: string;
+  status: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  assigned_to: number | null;
+  received_at: string | null;
+  created_at: string;
+  updated_at: string;
+  fb_lead_id: string | null;
+  form_id: number;
+  avatar_url: string | null;
+  assignee: {
+    id: number;
+    name: string;
+  } | null;
+}
+
+export interface LeadsApiResponse {
+  current_page: number;
+  data: Lead[];
+  first_page_url: string;
+  from: number;
+  last_page: number;
+  last_page_url: string;
+  links: Array<{
+    url: string | null;
+    label: string;
+    active: boolean;
+  }>;
+  next_page_url: string | null;
+  path: string;
+  per_page: number;
+  prev_page_url: string | null;
+  to: number;
+  total: number;
+}
+
+export interface LeadsResponse {
+  leads: Lead[];
+  pagination: {
+    currentPage: number;
+    lastPage: number;
+    perPage: number;
+    total: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
+export interface LeadFilters {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: string;
+  assigned_to?: number | 'unassigned' | 'all';
+  type?: string;
 }

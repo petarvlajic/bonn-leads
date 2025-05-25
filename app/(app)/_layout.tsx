@@ -43,15 +43,7 @@ export default function AppLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="leads/index"
-        options={{
-          title: 'My Leads',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
+
       <Tabs.Screen
         name="profile/index"
         options={{

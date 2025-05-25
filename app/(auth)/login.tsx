@@ -1,5 +1,4 @@
-// @ts-nocheck
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,25 +19,73 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { authState, login } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = async () => {
+  const { authState, login, clearError } = useAuth();
+
+  // Clear error when component mounts or when user starts typing
+  useEffect(() => {
+    if (authState.error) {
+      clearError();
+    }
+  }, [email, password]);
+
+  // Show error alert when error occurs
+  useEffect(() => {
+    if (authState.error && !isSubmitting) {
+      Alert.alert('Login Failed', authState.error);
+    }
+  }, [authState.error, isSubmitting]);
+
+  const validateForm = () => {
+    // Basic validation
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
+      return false;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleLogin = async () => {
+    if (!validateForm()) {
       return;
     }
 
-    await login(email, password);
+    try {
+      setIsSubmitting(true);
 
-    if (authState.error) {
-      Alert.alert('Error', authState.error);
+      // Call the login function
+      await login(email, password);
+
+      // If we reach here without error, login was successful
+      // Navigation is handled automatically in the auth provider
+    } catch (error) {
+      // Error handling is done in the auth provider and useEffect above
+      console.error('Login error:', error);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    Alert.alert(
+      'Forgot Password',
+      'Password reset functionality will be implemented soon.',
+      [{ text: 'OK' }]
+    );
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Login" showBackButton />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -57,6 +104,9 @@ export default function LoginScreen() {
               placeholder="name@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              editable={!authState.loading}
             />
 
             <Input
@@ -65,17 +115,32 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               placeholder="••••••••"
               secureTextEntry
+              autoComplete="current-password"
+              textContentType="password"
+              editable={!authState.loading}
             />
 
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+              disabled={authState.loading || isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.forgotPasswordText,
+                  (authState.loading || isSubmitting) && styles.linkDisabled,
+                ]}
+              >
+                Forgot password?
+              </Text>
             </TouchableOpacity>
 
             <Button
               title="Login"
               onPress={handleLogin}
-              isLoading={authState.loading}
+              isLoading={authState.loading || isSubmitting}
               style={styles.loginButton}
+              disabled={authState.loading || isSubmitting}
             />
           </View>
         </Card>
@@ -83,8 +148,15 @@ export default function LoginScreen() {
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/(auth)/register" asChild>
-            <TouchableOpacity>
-              <Text style={styles.registerLink}>Register</Text>
+            <TouchableOpacity disabled={authState.loading || isSubmitting}>
+              <Text
+                style={[
+                  styles.registerLink,
+                  (authState.loading || isSubmitting) && styles.linkDisabled,
+                ]}
+              >
+                Register
+              </Text>
             </TouchableOpacity>
           </Link>
         </View>
@@ -108,7 +180,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSizes.xxl,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.bold as any,
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
@@ -129,7 +201,7 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: fontSizes.sm,
     color: colors.primary,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.medium as any,
   },
   loginButton: {
     marginTop: spacing.md,
@@ -146,6 +218,9 @@ const styles = StyleSheet.create({
   registerLink: {
     fontSize: fontSizes.md,
     color: colors.primary,
-    fontWeight: fontWeights.medium,
+    fontWeight: fontWeights.medium as any,
+  },
+  linkDisabled: {
+    opacity: 0.5,
   },
 });

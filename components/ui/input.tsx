@@ -1,6 +1,12 @@
 // components/ui/input.tsx
 import React from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TextInputProps,
+} from 'react-native';
 import {
   colors,
   fontSizes,
@@ -8,7 +14,21 @@ import {
   borderRadius,
   spacing,
 } from '../../styles/theme';
-import { InputProps } from '../../types';
+
+interface InputProps {
+  label?: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  error?: string;
+  keyboardType?: TextInputProps['keyboardType'];
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
+  editable?: boolean;
+  rightIcon?: React.ReactNode;
+}
 
 const Input: React.FC<InputProps> = ({
   label,
@@ -19,6 +39,8 @@ const Input: React.FC<InputProps> = ({
   error,
   keyboardType = 'default',
   autoCapitalize = 'none',
+  autoComplete,
+  textContentType,
   editable = true,
   rightIcon,
 }) => {
@@ -29,9 +51,9 @@ const Input: React.FC<InputProps> = ({
         <TextInput
           style={[
             styles.input,
-            ...(error ? [styles.inputError] : []),
-            ...(rightIcon ? [{ paddingRight: spacing.xl }] : []),
-            ...(!editable ? [styles.inputDisabled] : []),
+            error ? styles.inputError : null,
+            rightIcon ? { paddingRight: spacing.xl } : null,
+            !editable ? styles.inputDisabled : null,
           ]}
           value={value}
           onChangeText={onChangeText}
@@ -40,6 +62,8 @@ const Input: React.FC<InputProps> = ({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
           editable={editable}
         />
         {rightIcon && (
@@ -58,7 +82,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: fontSizes.md,
-    fontWeight: '500', // Replace with a valid fontWeight value
+    fontWeight: fontWeights.medium as any,
     color: colors.text,
     marginBottom: spacing.xs,
   },

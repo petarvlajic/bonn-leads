@@ -12,6 +12,7 @@ export const colors = {
   pending: '#f59e0b', // Pending/processing states
   error: '#ef4444', // Error states
   inputBackground: '#ffffff', // Input field background
+  white: '#ffffff', // White color
 };
 
 export const spacing = {
