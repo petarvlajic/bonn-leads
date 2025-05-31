@@ -1,6 +1,7 @@
 // services/leads-service.ts
 import { fetchApi, ApiError } from '@/utils/api';
 import { Lead, LeadsApiResponse, LeadsResponse, LeadFilters } from '@/types';
+import { objectToQueryParams } from '@/utils/objectToQueryParams';
 
 // Profile/Assignee types
 export interface Profile {
@@ -52,6 +53,29 @@ export interface Assignee {
   avatar_url?: string | null;
 }
 
+// Filter types for advanced filtering
+export interface LeadFilter {
+  field: string;
+  operator:
+    | 'eq'
+    | 'neq'
+    | 'like'
+    | 'in'
+    | 'not_in'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte';
+  value: string | number | string[] | number[];
+}
+
+export interface AdvancedLeadFilters {
+  page?: number;
+  per_page?: number;
+  filters?: LeadFilter[];
+  search_term?: string; // Add search_term parameter
+}
+
 // Lead status options with labels and API names
 export const LEAD_STATUSES = {
   1: { label: 'Pending', apiName: 'pending' },
@@ -69,7 +93,72 @@ export type LeadStatusApiName =
 
 export class LeadsService {
   /**
-   * Fetch leads with optional filters and pagination
+   * Fetch leads with advanced filters and pagination
+   */
+  static async getLeadsAdvanced(
+    filters: AdvancedLeadFilters = {}
+  ): Promise<LeadsResponse> {
+    try {
+      // Build query parameters
+      const queryParams: any = {
+        page: filters.page || 1,
+        per_page: filters.per_page || 15,
+      };
+
+      // Add search_term if provided
+      if (filters.search_term && filters.search_term.trim()) {
+        queryParams.search_term = filters.search_term.trim();
+      }
+
+      // Add filters if provided
+      if (filters.filters && filters.filters.length > 0) {
+        queryParams.filters = filters.filters;
+      }
+
+      // Convert to query string
+      const queryString = objectToQueryParams(queryParams);
+      const endpoint = `/lead?${queryString}`;
+
+      console.log('Advanced filter endpoint:', endpoint);
+      console.log('Applied filters:', filters.filters);
+      console.log('Search term:', filters.search_term);
+
+      const response = await fetchApi<LeadsApiResponse>(endpoint, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new ApiError('Failed to fetch leads', response.statusCode);
+      }
+
+      const apiData = response.result;
+
+      // Map pagination data
+      const pagination = {
+        currentPage: apiData.current_page,
+        lastPage: apiData.last_page,
+        perPage: apiData.per_page,
+        total: apiData.total,
+        hasNextPage: !!apiData.next_page_url,
+        hasPrevPage: !!apiData.prev_page_url,
+      };
+
+      return {
+        leads: apiData.data,
+        pagination,
+      };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to fetch leads'
+      );
+    }
+  }
+
+  /**
+   * Fetch leads with optional filters and pagination (Legacy method)
    */
   static async getLeads(filters: LeadFilters = {}): Promise<LeadsResponse> {
     try {
@@ -139,6 +228,27 @@ export class LeadsService {
         error instanceof Error ? error.message : 'Failed to fetch leads'
       );
     }
+  }
+
+  /**
+   * Helper method to build filter array from status (no longer includes search)
+   */
+  static buildFilters(searchQuery?: string, status?: string): LeadFilter[] {
+    const filters: LeadFilter[] = [];
+
+    // Add status filter if provided and not "All Status"
+    if (status && status !== 'all' && status !== 'All Status') {
+      filters.push({
+        field: 'status',
+        operator: 'eq',
+        value: status,
+      });
+    }
+
+    // Note: Search is now handled separately via search_term parameter
+    // searchQuery parameter is kept for backward compatibility but not used
+
+    return filters;
   }
 
   /**
@@ -428,13 +538,18 @@ export class LeadsService {
   }
 
   /**
-   * Search leads
+   * Search leads using advanced filters
    */
   static async searchLeads(
     query: string,
-    filters: Omit<LeadFilters, 'search'> = {}
+    status?: string,
+    otherFilters: Omit<AdvancedLeadFilters, 'filters'> = {}
   ): Promise<LeadsResponse> {
-    return LeadsService.getLeads({ ...filters, search: query });
+    const filters = LeadsService.buildFilters(query, status);
+    return LeadsService.getLeadsAdvanced({
+      ...otherFilters,
+      filters,
+    });
   }
 
   /**

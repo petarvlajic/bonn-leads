@@ -1,4 +1,3 @@
-// app/(app)/home/index.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -25,7 +24,7 @@ import {
 import Header from '../../../components/ui/header';
 import { useAuth } from '../../../providers/auth-provider';
 
-import { Lead, LeadFilters } from '../../../types';
+import { Lead } from '../../../types';
 import {
   Assignee,
   LeadsService,
@@ -38,6 +37,19 @@ import LeadCard from '@/components/leads/lead-card';
 const getFullName = (lead: Lead): string => {
   return `${lead.first_name} ${lead.last_name}`.trim();
 };
+
+// Status mapping for filters (display name to API value)
+const STATUS_FILTER_MAP = {
+  'All Status': null, // No filter
+  Pending: 'pending',
+  'Lead Assigned': 'lead_assigned',
+  'Lead Contacted': 'lead_contacted',
+  'Waiting Recall': 'waiting_recall',
+  'Interview Arranged': 'interview_arranged',
+  Finished: 'finished',
+} as const;
+
+type StatusFilterKey = keyof typeof STATUS_FILTER_MAP;
 
 export default function AdminDashboardScreen() {
   const { authState } = useAuth();
@@ -52,9 +64,9 @@ export default function AdminDashboardScreen() {
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [expandedLeadId, setExpandedLeadId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<'All Status' | string>(
-    'All Status'
-  );
+  const [selectedStatus, setSelectedStatus] =
+    useState<StatusFilterKey>('All Status');
+  const [showFilters, setShowFilters] = useState(true);
   const [notificationsInitialized, setNotificationsInitialized] =
     useState(false);
 
@@ -66,6 +78,13 @@ export default function AdminDashboardScreen() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [totalLeads, setTotalLeads] = useState(0);
 
+  // Operation loading states
+  const [assigningLead, setAssigningLead] = useState<number | null>(null);
+  const [changingStatus, setChangingStatus] = useState<number | null>(null);
+  const [notifyingAssignee, setNotifyingAssignee] = useState<number | null>(
+    null
+  );
+
   // Error state
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +93,47 @@ export default function AdminDashboardScreen() {
 
   // Debounced search
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Enhanced Alert function with better UX
+  const showSuccessAlert = (title: string, message: string) => {
+    Alert.alert(`✅ ${title}`, message, [{ text: 'OK', style: 'default' }], {
+      cancelable: true,
+    });
+  };
+
+  const showErrorAlert = (title: string, message: string) => {
+    Alert.alert(
+      `❌ ${title}`,
+      message,
+      [{ text: 'OK', style: 'destructive' }],
+      { cancelable: true }
+    );
+  };
+
+  const showConfirmAlert = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    onCancel?: () => void
+  ) => {
+    Alert.alert(
+      title,
+      message,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: onCancel,
+        },
+        {
+          text: 'Confirm',
+          style: 'default',
+          onPress: onConfirm,
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   // Initialize notifications when component mounts
   useEffect(() => {
@@ -133,7 +193,7 @@ export default function AdminDashboardScreen() {
     };
   }, []);
 
-  // Fetch leads function
+  // Fetch leads function using LeadsService with advanced filters
   const fetchLeads = useCallback(
     async (
       page: number = 1,
@@ -151,22 +211,29 @@ export default function AdminDashboardScreen() {
           setError(null);
         }
 
-        const filters: LeadFilters = {
+        // Build filters array using LeadsService helper
+        const statusValue = STATUS_FILTER_MAP[selectedStatus];
+        const filters = LeadsService.buildFilters(
+          undefined, // Don't use search in filters anymore
+          statusValue || undefined
+        );
+
+        console.log('Fetching leads with filters:', filters);
+        console.log('Search term:', searchQuery);
+        console.log(
+          'Selected status:',
+          selectedStatus,
+          '-> API value:',
+          statusValue
+        );
+
+        // Use the advanced filtering method with search_term
+        const response = await LeadsService.getLeadsAdvanced({
           page,
           per_page: 15,
-        };
-
-        // Add search filter
-        if (searchQuery.trim()) {
-          filters.search = searchQuery.trim();
-        }
-
-        // Add status filter
-        if (selectedStatus !== 'All Status') {
-          filters.status = selectedStatus;
-        }
-
-        const response = await LeadsService.getLeads(filters);
+          filters: filters.length > 0 ? filters : undefined,
+          search_term: searchQuery.trim() || undefined, // Add search_term parameter
+        });
 
         if (isRefresh || page === 1) {
           setLeads(response.leads);
@@ -179,6 +246,11 @@ export default function AdminDashboardScreen() {
         setHasNextPage(response.pagination.hasNextPage);
         setTotalLeads(response.pagination.total);
         setCurrentPage(response.pagination.currentPage);
+
+        // Show success message for refresh
+        if (isRefresh) {
+          showSuccessAlert('Refreshed', 'Leads updated successfully');
+        }
       } catch (error) {
         console.error('Error fetching leads:', error);
         const errorMessage =
@@ -186,7 +258,7 @@ export default function AdminDashboardScreen() {
         setError(errorMessage);
 
         if (!isRefresh && !isLoadMore) {
-          Alert.alert('Error', errorMessage);
+          showErrorAlert('Failed to Load', errorMessage);
         }
       } finally {
         setLoading(false);
@@ -194,7 +266,7 @@ export default function AdminDashboardScreen() {
         setLoadingMore(false);
       }
     },
-    [searchQuery, selectedStatus]
+    [selectedStatus, searchQuery]
   );
 
   // Fetch assignees
@@ -204,14 +276,13 @@ export default function AdminDashboardScreen() {
       setAssignees(assigneesList);
     } catch (error) {
       console.error('Error fetching assignees:', error);
-      // Don't show alert for assignees failure, just log it
+      showErrorAlert('Failed to Load', 'Could not fetch assignees list');
     }
   }, []);
 
   // Initial load
   useEffect(() => {
     fetchLeads(1);
-    // Only fetch assignees for admins
     if (isAdmin) {
       fetchAssignees();
     }
@@ -237,6 +308,7 @@ export default function AdminDashboardScreen() {
 
   // Handle status filter change
   useEffect(() => {
+    console.log('Status filter changed to:', selectedStatus);
     setCurrentPage(1);
     fetchLeads(1);
   }, [selectedStatus]);
@@ -253,96 +325,177 @@ export default function AdminDashboardScreen() {
     }
   }, [loadingMore, hasNextPage, currentPage, fetchLeads]);
 
-  // Handle lead assignment
+  // Handle lead assignment with enhanced alerts
   const handleAssignLead = async (leadId: number, assigneeId: number) => {
-    try {
-      // Optimistic update
-      const assignee = assignees.find((a) => a.id === assigneeId);
-      setLeads((prevLeads) =>
-        prevLeads.map((lead) =>
-          lead.id === leadId
-            ? {
-                ...lead,
-                assigned_to: assigneeId,
-                assignee: assignee
-                  ? { id: assignee.id, name: assignee.name }
-                  : null,
-              }
-            : lead
-        )
-      );
+    const assignee = assignees.find((a) => a.id === assigneeId);
+    const lead = leads.find((l) => l.id === leadId);
 
-      // API call
-      await LeadsService.assignLead(leadId, assigneeId);
-
-      // Show success message
-      Alert.alert('Success', 'Lead assigned successfully');
-    } catch (error) {
-      console.error('Error assigning lead:', error);
-      Alert.alert('Error', 'Failed to assign lead');
-
-      // Revert optimistic update
-      fetchLeads(1, true);
+    if (!assignee || !lead) {
+      showErrorAlert('Assignment Failed', 'Could not find assignee or lead');
+      return;
     }
+
+    showConfirmAlert(
+      'Assign Lead',
+      `Assign "${getFullName(lead)}" to ${assignee.name}?`,
+      async () => {
+        setAssigningLead(leadId);
+
+        try {
+          // Optimistic update
+          setLeads((prevLeads) =>
+            prevLeads.map((lead) =>
+              lead.id === leadId
+                ? {
+                    ...lead,
+                    assigned_to: assigneeId,
+                    assignee: { id: assignee.id, name: assignee.name },
+                  }
+                : lead
+            )
+          );
+
+          await LeadsService.assignLead(leadId, assigneeId);
+
+          showSuccessAlert(
+            'Assignment Successful',
+            `"${getFullName(lead)}" has been assigned to ${assignee.name}`
+          );
+        } catch (error) {
+          console.error('Error assigning lead:', error);
+          const errorMessage =
+            error instanceof Error ? error.message : 'Failed to assign lead';
+
+          showErrorAlert('Assignment Failed', errorMessage);
+
+          // Revert optimistic update
+          fetchLeads(1, true);
+        } finally {
+          setAssigningLead(null);
+        }
+      }
+    );
   };
 
-  // Handle status change
-  // Handle status change
+  // Handle status change with enhanced alerts
   const handleStatusChange = async (
     leadId: number,
     statusNumber: LeadStatusNumber
   ) => {
-    try {
-      // Get the status label for display
-      const statusLabel = LeadsService.getStatusLabel(statusNumber);
+    const lead = leads.find((l) => l.id === leadId);
+    const statusLabel = LeadsService.getStatusLabel(statusNumber);
 
-      // Optimistic update
-      setLeads((prevLeads) =>
-        prevLeads.map((lead) =>
-          lead.id === leadId ? { ...lead, status: statusLabel } : lead
-        )
-      );
-
-      // API call with status number (method will convert to API name internally)
-      await LeadsService.changeLeadStatus(leadId, statusNumber);
-
-      // Show success message
-      Alert.alert('Success', `Status updated to "${statusLabel}"`);
-    } catch (error) {
-      console.error('Error updating lead status:', error);
-      Alert.alert('Error', 'Failed to update lead status');
-
-      // Revert optimistic update
-      fetchLeads(1, true);
+    if (!lead) {
+      showErrorAlert('Status Update Failed', 'Could not find lead');
+      return;
     }
+
+    showConfirmAlert(
+      'Change Status',
+      `Change "${getFullName(lead)}" status to "${statusLabel}"?`,
+      async () => {
+        setChangingStatus(leadId);
+
+        try {
+          // Optimistic update
+          setLeads((prevLeads) =>
+            prevLeads.map((lead) =>
+              lead.id === leadId ? { ...lead, status: statusLabel } : lead
+            )
+          );
+
+          await LeadsService.changeLeadStatus(leadId, statusNumber);
+
+          showSuccessAlert(
+            'Status Updated',
+            `"${getFullName(lead)}" status changed to "${statusLabel}"`
+          );
+        } catch (error) {
+          console.error('Error updating lead status:', error);
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : 'Failed to update lead status';
+
+          showErrorAlert('Status Update Failed', errorMessage);
+
+          // Revert optimistic update
+          fetchLeads(1, true);
+        } finally {
+          setChangingStatus(null);
+        }
+      }
+    );
   };
+
   const handleToggleExpand = (leadId: number) => {
     setExpandedLeadId(expandedLeadId === leadId ? null : leadId);
   };
 
+  // Handle notify with enhanced alerts
   const handleNotify = async (leadId: number) => {
-    try {
-      // Show loading state if needed
-      const response = await LeadsService.notifyAssignee(leadId);
+    const lead = leads.find((l) => l.id === leadId);
 
-      // Show success message
-      Alert.alert(
-        'Success',
-        response.message || 'Assignee notified successfully'
-      );
-
-      console.log(`Notified assignee for lead ${leadId}`);
-    } catch (error) {
-      console.error('Error notifying assignee:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to notify assignee';
-      Alert.alert('Error', errorMessage);
+    if (!lead) {
+      showErrorAlert('Notification Failed', 'Could not find lead');
+      return;
     }
+
+    if (!lead.assignee) {
+      showErrorAlert(
+        'Notification Failed',
+        'This lead is not assigned to anyone'
+      );
+      return;
+    }
+
+    showConfirmAlert(
+      'Send Notification',
+      `Send notification to ${lead.assignee.name} about "${getFullName(
+        lead
+      )}"?`,
+      async () => {
+        setNotifyingAssignee(leadId);
+
+        try {
+          const response = await LeadsService.notifyAssignee(leadId);
+
+          showSuccessAlert(
+            'Notification Sent',
+            `${lead.assignee.name} has been notified about "${getFullName(
+              lead
+            )}"`
+          );
+
+          console.log(`Notified assignee for lead ${leadId}`);
+        } catch (error) {
+          console.error('Error notifying assignee:', error);
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : 'Failed to notify assignee';
+
+          showErrorAlert('Notification Failed', errorMessage);
+        } finally {
+          setNotifyingAssignee(null);
+        }
+      }
+    );
   };
 
+  // Handle call with alert
   const handleCall = (leadId: number) => {
-    console.log(`Called lead ${leadId}`);
-    // You can add analytics tracking here
+    const lead = leads.find((l) => l.id === leadId);
+
+    if (lead) {
+      showSuccessAlert(
+        'Call Initiated',
+        `Calling ${getFullName(lead)} at ${
+          lead.phone || 'phone number not available'
+        }`
+      );
+      console.log(`Called lead ${leadId}`);
+    }
   };
 
   const handleRetryNotifications = async () => {
@@ -350,9 +503,9 @@ export default function AdminDashboardScreen() {
     setNotificationsInitialized(success);
 
     if (success) {
-      Alert.alert('Success', 'Notifications enabled successfully!');
+      showSuccessAlert('Success', 'Notifications enabled successfully!');
     } else {
-      Alert.alert(
+      showErrorAlert(
         'Error',
         'Failed to enable notifications. Please check your settings.'
       );
@@ -431,8 +584,18 @@ export default function AdminDashboardScreen() {
             />
           </View>
 
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="filter" size={24} color={colors.text} />
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              showFilters && styles.filterButtonActive,
+            ]}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Ionicons
+              name="filter"
+              size={24}
+              color={showFilters ? colors.card : colors.text}
+            />
           </TouchableOpacity>
 
           {/* Only show add button for admins */}
@@ -443,102 +606,47 @@ export default function AdminDashboardScreen() {
           )}
         </View>
 
-        <View style={styles.statusFilterContainer}>
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'All Status' &&
-                styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('All Status')}
-          >
-            <Text
-              style={
-                [
-                  /* styles */
-                ]
-              }
-            >
-              All Status
-            </Text>
-          </TouchableOpacity>
+        {/* Status Filter Pills - Only show if showFilters is true */}
+        {showFilters && (
+          <View style={styles.statusFilterContainer}>
+            {Object.keys(STATUS_FILTER_MAP).map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.statusFilterButton,
+                  selectedStatus === status && styles.statusFilterButtonActive,
+                ]}
+                onPress={() => setSelectedStatus(status as StatusFilterKey)}
+              >
+                <Text
+                  style={[
+                    styles.statusFilterText,
+                    selectedStatus === status && styles.statusFilterTextActive,
+                  ]}
+                >
+                  {status}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'Pending' && styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('Pending')}
-          >
-            <Text
-              style={
-                [
-                  /* styles */
-                ]
-              }
-            >
-              Pending
+        <Text style={styles.leadsCount}>
+          {totalLeads} leads
+          {(selectedStatus !== 'All Status' || searchQuery.trim()) && (
+            <Text style={styles.filterIndicator}>
+              {' '}
+              (
+              {[
+                searchQuery.trim() && `search: "${searchQuery.trim()}"`,
+                selectedStatus !== 'All Status' && `status: ${selectedStatus}`,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              )
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'Lead Assigned' &&
-                styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('Lead Assigned')}
-          >
-            <Text
-              style={
-                [
-                  /* styles */
-                ]
-              }
-            >
-              Lead Assigned
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'Lead Contacted' &&
-                styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('Lead Contacted')}
-          >
-            <Text
-              style={
-                [
-                  /* styles */
-                ]
-              }
-            >
-              Lead Contacted
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.statusFilterButton,
-              selectedStatus === 'Finished' && styles.statusFilterButtonActive,
-            ]}
-            onPress={() => setSelectedStatus('Finished')}
-          >
-            <Text
-              style={
-                [
-                  /* styles */
-                ]
-              }
-            >
-              Finished
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.leadsCount}>{totalLeads} leads</Text>
+          )}
+        </Text>
 
         <FlatList
           data={leads}
@@ -561,6 +669,9 @@ export default function AdminDashboardScreen() {
               }
               onNotify={isAdmin ? () => handleNotify(item.id) : undefined}
               onCall={!isAdmin ? () => handleCall(item.id) : undefined}
+              isAssigning={assigningLead === item.id}
+              isChangingStatus={changingStatus === item.id}
+              isNotifying={notifyingAssignee === item.id}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -592,8 +703,8 @@ export default function AdminDashboardScreen() {
               />
               <Text style={styles.emptyText}>No leads found</Text>
               <Text style={styles.emptySubtext}>
-                {searchQuery || selectedStatus !== 'All Status'
-                  ? 'Try adjusting your filters'
+                {searchQuery.trim() || selectedStatus !== 'All Status'
+                  ? 'Try adjusting your search or filters'
                   : 'No leads available'}
               </Text>
             </View>
@@ -657,8 +768,8 @@ const styles = StyleSheet.create({
   notificationWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3CD', // fallback warning background
-    borderColor: '#FFC107', // fallback warning color
+    backgroundColor: '#FFF3CD',
+    borderColor: '#FFC107',
     borderWidth: 1,
     borderRadius: borderRadius.md,
     padding: spacing.sm,
@@ -667,7 +778,7 @@ const styles = StyleSheet.create({
   notificationWarningText: {
     flex: 1,
     marginLeft: spacing.sm,
-    color: '#856404', // fallback warning text color
+    color: '#856404',
     fontSize: fontSizes.sm,
   },
   retryText: {
@@ -708,6 +819,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.sm,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
   },
   addButton: {
     marginLeft: spacing.sm,
@@ -750,6 +864,11 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium as any,
     color: colors.textSecondary,
     marginBottom: spacing.md,
+  },
+  filterIndicator: {
+    fontSize: fontSizes.sm,
+    fontStyle: 'italic',
+    color: colors.primary,
   },
   listContent: {
     paddingBottom: spacing.xl,

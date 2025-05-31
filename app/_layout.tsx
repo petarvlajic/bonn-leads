@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import AuthProvider from '@/providers/auth-provider';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -14,12 +13,17 @@ function RootLayoutNav() {
   const segments = useSegments();
   const [isCheckingProfile, setIsCheckingProfile] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Set mounted flag after first render
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const checkProfile = async () => {
     if (!authState.isAuthenticated || isCheckingProfile) return;
 
     setIsCheckingProfile(true);
-
     try {
       const response = await fetchApi('/profile/me', {
         method: 'GET',
@@ -29,22 +33,29 @@ function RootLayoutNav() {
         // Profile check successful, redirect to home if not already there
         const inAppGroup = segments[0] === '(app)';
         if (!inAppGroup) {
-          console.log('Ovde');
-          router.replace('/(app)/home');
+          console.log('Redirecting to home');
+          // Add small delay to ensure navigation is mounted
+          setTimeout(() => {
+            router.replace('/(app)/home');
+          }, 100);
         }
       } else {
         // Profile check failed (401 or other error), redirect to index
-        const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+        const inAuthGroup = segments[0] === '(auth)' || segments.length === 0;
         if (!inAuthGroup) {
-          router.replace('/');
+          setTimeout(() => {
+            router.replace('/');
+          }, 100);
         }
       }
     } catch (error) {
       console.error('Profile check error:', error);
       // On error, redirect to index page
-      const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+      const inAuthGroup = segments[0] === '(auth)' || segments.length === 0;
       if (!inAuthGroup) {
-        router.replace('/');
+        setTimeout(() => {
+          router.replace('/');
+        }, 100);
       }
     } finally {
       setIsCheckingProfile(false);
@@ -61,9 +72,11 @@ function RootLayoutNav() {
       checkProfile();
     } else {
       // No authentication, ensure user is on auth pages
-      const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+      const inAuthGroup = segments[0] === '(auth)' || segments.length === 0;
       if (!inAuthGroup) {
-        router.replace('/');
+        setTimeout(() => {
+          router.replace('/');
+        }, 100);
       }
       setInitialCheckDone(true);
     }
