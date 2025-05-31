@@ -80,6 +80,7 @@ export default function AdminDashboardScreen() {
 
   // Operation loading states
   const [assigningLead, setAssigningLead] = useState<number | null>(null);
+  const [unassigningLead, setUnassigningLead] = useState<number | null>(null);
   const [changingStatus, setChangingStatus] = useState<number | null>(null);
   const [notifyingAssignee, setNotifyingAssignee] = useState<number | null>(
     null
@@ -377,6 +378,67 @@ export default function AdminDashboardScreen() {
     );
   };
 
+  // Handle lead unassignment with enhanced alerts
+  const handleUnassignLead = async (leadId: number) => {
+    const lead = leads.find((l) => l.id === leadId);
+
+    if (!lead) {
+      showErrorAlert('Unassignment Failed', 'Could not find lead');
+      return;
+    }
+
+    if (!lead.assignee) {
+      showErrorAlert(
+        'Unassignment Failed',
+        'This lead is not assigned to anyone'
+      );
+      return;
+    }
+
+    const assigneeName = lead.assignee.name;
+
+    showConfirmAlert(
+      'Unassign Lead',
+      `Remove "${getFullName(lead)}" from ${assigneeName}?`,
+      async () => {
+        setUnassigningLead(leadId);
+
+        try {
+          // Optimistic update
+          setLeads((prevLeads) =>
+            prevLeads.map((lead) =>
+              lead.id === leadId
+                ? {
+                    ...lead,
+                    assigned_to: null,
+                    assignee: null,
+                  }
+                : lead
+            )
+          );
+
+          await LeadsService.unassignLead(leadId);
+
+          showSuccessAlert(
+            'Unassignment Successful',
+            `"${getFullName(lead)}" has been unassigned from ${assigneeName}`
+          );
+        } catch (error) {
+          console.error('Error unassigning lead:', error);
+          const errorMessage =
+            error instanceof Error ? error.message : 'Failed to unassign lead';
+
+          showErrorAlert('Unassignment Failed', errorMessage);
+
+          // Revert optimistic update
+          fetchLeads(1, true);
+        } finally {
+          setUnassigningLead(null);
+        }
+      }
+    );
+  };
+
   // Handle status change with enhanced alerts
   const handleStatusChange = async (
     leadId: number,
@@ -667,11 +729,11 @@ export default function AdminDashboardScreen() {
                   ? (assigneeId) => handleAssignLead(item.id, assigneeId)
                   : undefined
               }
+              onUnassignLead={
+                isAdmin ? () => handleUnassignLead(item.id) : undefined
+              }
               onNotify={isAdmin ? () => handleNotify(item.id) : undefined}
               onCall={!isAdmin ? () => handleCall(item.id) : undefined}
-              isAssigning={assigningLead === item.id}
-              isChangingStatus={changingStatus === item.id}
-              isNotifying={notifyingAssignee === item.id}
             />
           )}
           contentContainerStyle={styles.listContent}

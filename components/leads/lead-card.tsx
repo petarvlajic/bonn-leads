@@ -36,6 +36,7 @@ interface LeadCardProps {
   onToggleExpand: () => void;
   onStatusChange?: (statusNumber: LeadStatusNumber) => void; // Changed to use status number
   onAssignLead?: (assigneeId: number) => void; // Optional for admin
+  onUnassignLead?: () => void; // Optional for admin
   onNotify?: () => void; // Optional for admin
   onCall?: () => void; // Optional for regular user
 }
@@ -49,6 +50,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
   onToggleExpand,
   onStatusChange,
   onAssignLead,
+  onUnassignLead,
   onNotify,
   onCall,
 }) => {
@@ -104,6 +106,30 @@ const LeadCard: React.FC<LeadCardProps> = ({
       onAssignLead(assigneeId);
     }
     setShowAssigneeModal(false);
+  };
+
+  const handleUnassign = () => {
+    Alert.alert(
+      'Unassign Lead',
+      `Are you sure you want to unassign ${
+        lead.assignee?.name || 'this assignee'
+      } from this lead?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Unassign',
+          style: 'destructive',
+          onPress: () => {
+            if (onUnassignLead) {
+              onUnassignLead();
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleStatusSelect = (statusNumber: LeadStatusNumber) => {
@@ -368,29 +394,49 @@ const LeadCard: React.FC<LeadCardProps> = ({
           )}
 
           {/* Assignment - only for admins */}
-          {isAdmin &&
-            (lead.assignee ? (
-              <View style={styles.infoRow}>
-                <Ionicons
-                  name="person"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-                <Text style={styles.infoText}>
-                  Assigned to: {lead.assignee.name}
-                </Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.infoRow}
-                onPress={() => setShowAssigneeModal(true)}
-              >
-                <Ionicons name="person-add" size={16} color={colors.primary} />
-                <Text style={[styles.infoText, styles.assignText]}>
-                  Tap to assign
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {isAdmin && (
+            <View style={styles.assignmentSection}>
+              {lead.assignee ? (
+                <View style={styles.assignedRow}>
+                  <View style={styles.infoRow}>
+                    <Ionicons
+                      name="person"
+                      size={16}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={styles.infoText}>
+                      Assigned to: {lead.assignee.name}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.unassignButton}
+                    onPress={handleUnassign}
+                  >
+                    <Ionicons
+                      name="person-remove"
+                      size={16}
+                      color={colors.error}
+                    />
+                    <Text style={styles.unassignText}>Unassign</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.infoRow}
+                  onPress={() => setShowAssigneeModal(true)}
+                >
+                  <Ionicons
+                    name="person-add"
+                    size={16}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.infoText, styles.assignText]}>
+                    Tap to assign
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           <View style={styles.infoRow}>
             <Ionicons name="time" size={16} color={colors.textSecondary} />
@@ -545,6 +591,28 @@ const styles = StyleSheet.create({
   assignText: {
     color: colors.primary,
     fontStyle: 'italic',
+  },
+  assignmentSection: {
+    marginBottom: spacing.sm,
+  },
+  assignedRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  unassignButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.error + '15', // Add transparency
+  },
+  unassignText: {
+    marginLeft: spacing.xs,
+    fontSize: fontSizes.sm,
+    color: colors.error,
+    fontWeight: fontWeights.medium as any,
   },
   modalOverlay: {
     flex: 1,

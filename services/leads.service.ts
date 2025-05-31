@@ -452,6 +452,36 @@ export class LeadsService {
   }
 
   /**
+   * Unassign lead from current assignee
+   * POST /lead/{lead.id}/unassign
+   */
+  static async unassignLead(leadId: number): Promise<Lead> {
+    try {
+      const response = await fetchApi<{ data: Lead; message: string }>(
+        `/lead/${leadId}/unassign`,
+        {
+          method: 'POST',
+        }
+      );
+
+      console.log('Lead unassignment response:', response);
+
+      if (!response.ok) {
+        throw new ApiError('Failed to unassign lead', response.statusCode);
+      }
+
+      return response.result.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to unassign lead'
+      );
+    }
+  }
+
+  /**
    * Send manual notification to assignee
    * POST /lead/{lead.id}/notify_assignee
    */

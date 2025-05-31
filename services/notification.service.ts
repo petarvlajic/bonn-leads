@@ -43,7 +43,7 @@ export class NotificationService {
 
       // Get the Expo push token
       const token = await Notifications.getExpoPushTokenAsync({
-        projectId: 'your-expo-project-id', // Replace with your actual project ID
+        projectId: 'bc10a2e3-a404-4a22-9b52-4bfe1619a96c', // Replace with your actual project ID
       });
 
       // Configure notification channel for Android
