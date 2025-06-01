@@ -167,9 +167,9 @@ const LeadCard: React.FC<LeadCardProps> = ({
                 >
                   <View style={styles.assigneeInfo}>
                     <View style={styles.assigneeAvatar}>
-                      {assignee.avatar_url ? (
+                      {assignee?.avatar_url ? (
                         <Image
-                          source={{ uri: assignee.avatar_url }}
+                          source={{ uri: assignee?.avatar_url }}
                           style={styles.avatarImage}
                         />
                       ) : (
@@ -829,6 +829,16 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium as any,
     marginLeft: spacing.xs,
+  },
+  noAssigneesContainer: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noAssigneesText: {
+    fontSize: fontSizes.md,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
 

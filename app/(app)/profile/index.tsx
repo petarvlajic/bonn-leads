@@ -137,7 +137,7 @@ export default function ProfileScreen() {
           text: 'OK',
           onPress: () => {
             // Redirect to dashboard after user dismisses the alert
-            router.push('/dashboard');
+            router.push('/(app)/home');
           },
         },
       ]);
