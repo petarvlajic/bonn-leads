@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import {
   colors,
   fontSizes,
@@ -23,11 +24,11 @@ import Input from '../../../components/ui/input';
 import Button from '../../../components/ui/button';
 import Header from '../../../components/ui/header';
 import { useAuth } from '../../../providers/auth-provider';
-
 import { AuthService } from '../../../services/auth.service';
 import { ImagePickerService } from '@/services/image-picker.service';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const {
     authState,
     updateUserProfile,
@@ -35,14 +36,17 @@ export default function ProfileScreen() {
     clearError,
     refreshUserProfile,
   } = useAuth();
-  const user = authState.user;
 
+  const user = authState.user;
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
   const [role, setRole] = useState<'Admin' | 'Agent' | 'User'>(
     user?.role || 'User'
+  );
+  const [selectedAvatarUri, setSelectedAvatarUri] = useState<string | null>(
+    null
   );
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -100,25 +104,46 @@ export default function ProfileScreen() {
     }
 
     setIsSubmitting(true);
-
     try {
-      await updateUserProfile({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phoneNumber: phoneNumber.trim(),
-        // Note: email and role are not included as per your API
-      });
+      // Prepare update data
+      const updateData: {
+        first_name: string;
+        last_name: string;
+        phone: string;
+        avatar?: string;
+      } = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone: phoneNumber.trim(),
+      };
+
+      // Add avatar if user selected a new one
+      if (selectedAvatarUri) {
+        updateData.avatar = selectedAvatarUri;
+      }
+
+      // Use the updated AuthService.updateProfile method
+      await AuthService.updateProfile(user?.profileId, updateData);
+
+      // Refresh user profile to get the latest data
+      await refreshUserProfile();
 
       // If no error occurred, the update was successful
-      if (!authState.error) {
-        setIsEditing(false);
-        Alert.alert('Success', 'Profile updated successfully');
+      setIsEditing(false);
+      setSelectedAvatarUri(null); // Clear selected avatar
 
-        // The updateUserProfile function now automatically refetches the profile
-        // No additional action needed here
-      }
+      Alert.alert('Success', 'Profile updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Redirect to dashboard after user dismisses the alert
+            router.push('/dashboard');
+          },
+        },
+      ]);
     } catch (error) {
       console.error('Profile update error:', error);
+      Alert.alert('Update Failed', error.message || 'Failed to update profile');
     } finally {
       setIsSubmitting(false);
     }
@@ -131,11 +156,12 @@ export default function ProfileScreen() {
       setLastName(user.lastName || '');
       setPhoneNumber(user.phoneNumber || '');
     }
+    setSelectedAvatarUri(null); // Clear selected avatar
     setIsEditing(false);
     clearError();
   };
 
-  const handlePhotoUpdate = async () => {
+  const handlePhotoSelect = async () => {
     try {
       setIsUploadingPhoto(true);
 
@@ -145,18 +171,13 @@ export default function ProfileScreen() {
         return; // User cancelled
       }
 
-      // Upload the image
-      await AuthService.updateProfilePhoto(imageUri);
-
-      // Refetch profile to get the latest data from server
-      await refreshUserProfile();
-
-      Alert.alert('Success', 'Profile photo updated successfully!');
+      // Store the selected image URI for later upload
+      setSelectedAvatarUri(imageUri);
     } catch (error) {
-      console.error('Photo update error:', error);
+      console.error('Photo selection error:', error);
       Alert.alert(
-        'Upload Failed',
-        'Failed to update profile photo. Please try again.'
+        'Selection Failed',
+        'Failed to select photo. Please try again.'
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -195,10 +216,17 @@ export default function ProfileScreen() {
     return `${firstInitial}${lastInitial}`;
   };
 
+  // Get the image to display (selected new image or current profile image)
+  const getDisplayImage = () => {
+    if (selectedAvatarUri) {
+      return selectedAvatarUri;
+    }
+    return user?.profileImage;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="My Profile" />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -207,9 +235,9 @@ export default function ProfileScreen() {
           <Text style={styles.title}>Profile Information</Text>
 
           <View style={styles.profileImageContainer}>
-            {user?.profileImage ? (
+            {getDisplayImage() ? (
               <Image
-                source={{ uri: user.profileImage }}
+                source={{ uri: getDisplayImage() }}
                 style={styles.profileImage}
               />
             ) : (
@@ -218,26 +246,34 @@ export default function ProfileScreen() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[
-                styles.cameraButton,
-                isUploadingPhoto && styles.cameraButtonDisabled,
-              ]}
-              onPress={handlePhotoUpdate}
-              disabled={isUploadingPhoto || authState.loading}
-            >
-              {isUploadingPhoto ? (
-                <View style={styles.uploadingIndicator}>
-                  <Ionicons name="hourglass" size={16} color={colors.text} />
-                </View>
-              ) : (
-                <Ionicons name="camera" size={20} color={colors.text} />
-              )}
-            </TouchableOpacity>
+            {isEditing && (
+              <TouchableOpacity
+                style={[
+                  styles.cameraButton,
+                  isUploadingPhoto && styles.cameraButtonDisabled,
+                ]}
+                onPress={handlePhotoSelect}
+                disabled={isUploadingPhoto || authState.loading}
+              >
+                {isUploadingPhoto ? (
+                  <View style={styles.uploadingIndicator}>
+                    <Ionicons name="hourglass" size={16} color={colors.text} />
+                  </View>
+                ) : (
+                  <Ionicons name="camera" size={20} color={colors.text} />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {isUploadingPhoto && (
-            <Text style={styles.uploadingText}>Uploading photo...</Text>
+            <Text style={styles.uploadingText}>Selecting photo...</Text>
+          )}
+
+          {selectedAvatarUri && isEditing && (
+            <Text style={styles.selectedPhotoText}>
+              New photo selected! Save changes to update.
+            </Text>
           )}
 
           <View style={styles.form}>
@@ -332,7 +368,6 @@ export default function ProfileScreen() {
                   disabled={isUploadingPhoto}
                 />
               )}
-
               <Button
                 title="Logout"
                 onPress={handleLogout}
@@ -416,6 +451,13 @@ const styles = StyleSheet.create({
   uploadingText: {
     textAlign: 'center',
     color: colors.textSecondary,
+    fontSize: fontSizes.sm,
+    marginBottom: spacing.md,
+    fontStyle: 'italic',
+  },
+  selectedPhotoText: {
+    textAlign: 'center',
+    color: colors.primary,
     fontSize: fontSizes.sm,
     marginBottom: spacing.md,
     fontStyle: 'italic',

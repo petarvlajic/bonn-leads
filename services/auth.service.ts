@@ -113,7 +113,7 @@ export class AuthService {
   }
 
   /**
-   * Update user profile
+   * Update user profile - now supports both regular data and avatar upload
    */
   static async updateProfile(
     profileId: string | undefined,
@@ -121,23 +121,63 @@ export class AuthService {
       first_name?: string;
       last_name?: string;
       phone?: string;
+      avatar?: string; // Image URI for avatar upload
     }
   ): Promise<User> {
     try {
-      const updateData = {
-        ...profileData,
-        _method: 'PUT', // Required by your API
-      };
-
       // Determine the endpoint - use profileId if available, otherwise use a generic endpoint
       const endpoint = profileId ? `/profile/${profileId}` : '/profile';
 
+      let requestBody: FormData | string;
+      let headers: Record<string, string> = {};
+
+      // If avatar is included, use FormData
+      if (profileData.avatar) {
+        const formData = new FormData();
+
+        // Add profile data
+        if (profileData.first_name !== undefined) {
+          formData.append('first_name', profileData.first_name);
+        }
+        if (profileData.last_name !== undefined) {
+          formData.append('last_name', profileData.last_name);
+        }
+        if (profileData.phone !== undefined) {
+          formData.append('phone', profileData.phone);
+        }
+
+        // Add avatar file
+        const fileExtension = profileData.avatar.split('.').pop() || 'jpg';
+        const fileName = `profile_${Date.now()}.${fileExtension}`;
+
+        formData.append('avatar', {
+          uri: profileData.avatar,
+          type: `image/${fileExtension}`,
+          name: fileName,
+        } as any);
+
+        // Add _method for Laravel
+        formData.append('_method', 'PUT');
+
+        requestBody = formData;
+        headers['Content-Type'] = 'multipart/form-data';
+      } else {
+        // Regular JSON update without avatar
+        const updateData = {
+          ...profileData,
+          _method: 'PUT', // Required by your API
+        };
+        requestBody = JSON.stringify(updateData);
+        headers['Content-Type'] = 'application/json';
+      }
+
       const response = await fetchApi<ProfileApiResponse>(endpoint, {
         method: 'POST', // Using POST with _method: PUT as per your API requirement
-        body: JSON.stringify(updateData),
+        body: requestBody,
+        headers,
       });
 
-      console.log('Odgovor API response:', response.result);
+      console.log('Profile update API response:', response.result);
 
       if (!response.ok) {
         throw new ApiError('Failed to update profile', response.statusCode);
@@ -170,46 +210,17 @@ export class AuthService {
   }
 
   /**
-   * Update profile photo
+   * Update profile photo only (using the same profile endpoint)
    */
-  static async updateProfilePhoto(imageUri: string): Promise<string> {
+  static async updateProfilePhoto(imageUri: string): Promise<User> {
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
+      // Get current user to get profileId
+      const currentUser = await this.getUser();
 
-      // Get file extension from URI
-      const fileExtension = imageUri.split('.').pop() || 'jpg';
-      const fileName = `profile_${Date.now()}.${fileExtension}`;
-
-      // Add the image file to FormData
-      formData.append('avatar', {
-        uri: imageUri,
-        type: `image/${fileExtension}`,
-        name: fileName,
-      } as any);
-
-      // Add _method for Laravel
-      formData.append('_method', 'PUT');
-
-      const response = await fetchApi<{ avatar_url: string; message: string }>(
-        '/profile/avatar',
-        {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new ApiError(
-          'Failed to upload profile photo',
-          response.statusCode
-        );
-      }
-
-      return response.result.avatar_url;
+      // Use the main updateProfile method with only avatar
+      return await this.updateProfile(currentUser?.profileId, {
+        avatar: imageUri,
+      });
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

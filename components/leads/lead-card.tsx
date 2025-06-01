@@ -66,9 +66,11 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
     if (typeof status === 'number') {
       const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
-      statusStr = statusObj ? statusObj.label.toLowerCase() : 'unknown';
+      statusStr = statusObj
+        ? statusObj.label.toLowerCase().replace(/_/g, ' ')
+        : 'unknown';
     } else {
-      statusStr = status.toLowerCase();
+      statusStr = status.toLowerCase().replace(/_/g, ' ');
     }
 
     switch (statusStr) {
@@ -96,9 +98,9 @@ const LeadCard: React.FC<LeadCardProps> = ({
   const getStatusLabel = (status: string | number): string => {
     if (typeof status === 'number') {
       const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
-      return statusObj ? statusObj.label : 'Unknown';
+      return statusObj ? statusObj.label.replace(/_/g, ' ') : 'Unknown';
     }
-    return status;
+    return status.replace(/_/g, ' ');
   };
 
   const handleAssigneeSelect = (assigneeId: number) => {
@@ -172,13 +174,49 @@ const LeadCard: React.FC<LeadCardProps> = ({
                         />
                       ) : (
                         <Text style={styles.avatarText}>
-                          {assignee.name.charAt(0).toUpperCase()}
+                          {(() => {
+                            // Check if assignee has proper first/last name
+                            if (assignee.first_name && assignee.last_name) {
+                              return `${assignee.first_name.charAt(
+                                0
+                              )}${assignee.last_name.charAt(0)}`.toUpperCase();
+                            }
+                            // If only one name is available
+                            if (assignee.first_name) {
+                              return assignee.first_name
+                                .charAt(0)
+                                .toUpperCase();
+                            }
+                            if (assignee.last_name) {
+                              return assignee.last_name.charAt(0).toUpperCase();
+                            }
+                            // Fallback to email from user object
+                            const email = assignee.user?.email || '';
+                            return email.charAt(0).toUpperCase();
+                          })()}
                         </Text>
                       )}
                     </View>
                     <View style={styles.assigneeDetails}>
-                      <Text style={styles.assigneeName}>{assignee.name}</Text>
-                      <Text style={styles.assigneeEmail}>{assignee.email}</Text>
+                      <Text style={styles.assigneeName}>
+                        {(() => {
+                          // Build name from first_name and last_name
+                          const firstName = assignee.first_name || '';
+                          const lastName = assignee.last_name || '';
+                          const fullName = `${firstName} ${lastName}`.trim();
+
+                          // If we have a proper name, use it
+                          if (fullName) {
+                            return fullName;
+                          }
+
+                          // Fallback to email from user object
+                          return assignee.user?.email || 'Unknown User';
+                        })()}
+                      </Text>
+                      <Text style={styles.assigneeEmail}>
+                        {assignee.user?.email || ''}
+                      </Text>
                     </View>
                   </View>
                   <Ionicons
@@ -216,7 +254,8 @@ const LeadCard: React.FC<LeadCardProps> = ({
               {Object.entries(LEAD_STATUSES).map(([number, statusObj]) => {
                 const statusNumber = Number(number) as LeadStatusNumber;
                 const currentStatusLabel = getStatusLabel(lead.status);
-                const isCurrentStatus = currentStatusLabel === statusObj.label;
+                const isCurrentStatus =
+                  currentStatusLabel === statusObj.label.replace(/_/g, ' ');
 
                 return (
                   <TouchableOpacity
@@ -240,7 +279,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                           isCurrentStatus && styles.statusLabelActive,
                         ]}
                       >
-                        {statusObj.label}
+                        {statusObj.label.replace(/_/g, ' ')}
                       </Text>
                     </View>
                     {isCurrentStatus && (
@@ -332,14 +371,18 @@ const LeadCard: React.FC<LeadCardProps> = ({
       <TouchableOpacity onPress={onToggleExpand} style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.nameContainer}>
-            <Text style={styles.name}>{name}</Text>
+            <Text style={styles.name} numberOfLines={2}>
+              {name}
+            </Text>
             <View style={styles.typeContainer}>
               <Ionicons
                 name={getTypeIcon(lead.type)}
                 size={14}
                 color={colors.textSecondary}
               />
-              <Text style={styles.type}>{lead.type}</Text>
+              <Text style={styles.type} numberOfLines={1}>
+                {lead.type}
+              </Text>
             </View>
           </View>
         </View>
@@ -351,7 +394,9 @@ const LeadCard: React.FC<LeadCardProps> = ({
               { backgroundColor: getStatusColor(lead.status) },
             ]}
           >
-            <Text style={styles.statusText}>{getStatusLabel(lead.status)}</Text>
+            <Text style={styles.statusText} numberOfLines={2}>
+              {getStatusLabel(lead.status)}
+            </Text>
           </View>
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -367,14 +412,19 @@ const LeadCard: React.FC<LeadCardProps> = ({
           {isUser ? (
             <TouchableOpacity style={styles.infoRow} onPress={handleEmail}>
               <Ionicons name="mail" size={16} color={colors.primary} />
-              <Text style={[styles.infoText, styles.linkText]}>
+              <Text
+                style={[styles.infoText, styles.linkText]}
+                numberOfLines={2}
+              >
                 {lead.email}
               </Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.infoRow}>
               <Ionicons name="mail" size={16} color={colors.textSecondary} />
-              <Text style={styles.infoText}>{lead.email}</Text>
+              <Text style={styles.infoText} numberOfLines={2}>
+                {lead.email}
+              </Text>
             </View>
           )}
 
@@ -382,14 +432,19 @@ const LeadCard: React.FC<LeadCardProps> = ({
           {isUser ? (
             <TouchableOpacity style={styles.infoRow} onPress={handleCall}>
               <Ionicons name="call" size={16} color={colors.primary} />
-              <Text style={[styles.infoText, styles.linkText]}>
+              <Text
+                style={[styles.infoText, styles.linkText]}
+                numberOfLines={1}
+              >
                 {lead.phone}
               </Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.infoRow}>
               <Ionicons name="call" size={16} color={colors.textSecondary} />
-              <Text style={styles.infoText}>{lead.phone}</Text>
+              <Text style={styles.infoText} numberOfLines={1}>
+                {lead.phone}
+              </Text>
             </View>
           )}
 
@@ -404,8 +459,18 @@ const LeadCard: React.FC<LeadCardProps> = ({
                       size={16}
                       color={colors.textSecondary}
                     />
-                    <Text style={styles.infoText}>
-                      Assigned to: {lead.assignee.name}
+                    <Text style={styles.infoText} numberOfLines={2}>
+                      Assigned to:{' '}
+                      {(() => {
+                        const firstName = lead.assignee.first_name || '';
+                        const lastName = lead.assignee.last_name || '';
+                        const fullName = `${firstName} ${lastName}`.trim();
+                        return (
+                          fullName ||
+                          lead.assignee.user?.email ||
+                          'Unknown User'
+                        );
+                      })()}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -440,7 +505,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
           <View style={styles.infoRow}>
             <Ionicons name="time" size={16} color={colors.textSecondary} />
-            <Text style={styles.infoText}>
+            <Text style={styles.infoText} numberOfLines={1}>
               Created: {new Date(lead.created_at).toLocaleDateString()}
             </Text>
           </View>
@@ -532,6 +597,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+    marginRight: spacing.sm,
   },
   nameContainer: {
     flexDirection: 'column',
@@ -541,32 +607,38 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold as any,
     color: colors.text,
     marginBottom: spacing.xs,
+    flexWrap: 'wrap',
   },
   typeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   type: {
     fontSize: fontSizes.sm,
     color: colors.textSecondary,
     marginLeft: spacing.xs,
     textTransform: 'capitalize',
+    flexShrink: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flexShrink: 0,
   },
   statusBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
+    maxWidth: 120,
   },
   statusText: {
     fontSize: fontSizes.xs,
     color: colors.white,
     fontWeight: fontWeights.medium as any,
     textTransform: 'capitalize',
+    textAlign: 'center',
   },
   content: {
     padding: spacing.md,
@@ -576,13 +648,16 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.sm,
+    flexWrap: 'wrap',
   },
   infoText: {
     marginLeft: spacing.sm,
     fontSize: fontSizes.md,
     color: colors.text,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   linkText: {
     color: colors.primary,
@@ -596,9 +671,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   assignedRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    gap: spacing.sm,
   },
   unassignButton: {
     flexDirection: 'row',
@@ -607,6 +681,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: borderRadius.sm,
     backgroundColor: colors.error + '15', // Add transparency
+    alignSelf: 'flex-start',
   },
   unassignText: {
     marginLeft: spacing.xs,

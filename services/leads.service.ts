@@ -46,11 +46,27 @@ export interface ProfilesApiResponse {
   total: number;
 }
 
+// Updated Assignee interface to match the actual API response structure
 export interface Assignee {
   id: number;
-  name: string;
-  email: string;
-  avatar_url?: string | null;
+  user_id: number;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  department: string | null;
+  expo_tokens: string[] | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+  user: {
+    id: number;
+    email: string;
+    email_verified_at: string | null;
+    username: string;
+    role: string;
+    created_at: string;
+    updated_at: string;
+  };
 }
 
 // Filter types for advanced filtering
@@ -84,6 +100,7 @@ export const LEAD_STATUSES = {
   4: { label: 'Waiting Recall', apiName: 'waiting_recall' },
   5: { label: 'Interview Arranged', apiName: 'interview_arranged' },
   6: { label: 'Finished', apiName: 'finished' },
+  7: { label: 'Not Interested', apiName: 'not_interested' }, // Added missing status
 } as const;
 
 export type LeadStatusNumber = keyof typeof LEAD_STATUSES;
@@ -397,21 +414,36 @@ export class LeadsService {
         throw new ApiError('Failed to fetch assignees', response.statusCode);
       }
 
-      const profiles = response.result.data;
+      // Based on your API response structure: { ok: true, statusCode: 200, result: { message: "...", data: { current_page: ..., data: [...] } } }
+      const profilesData = response.result;
+      const profiles = profilesData.data; // This is the actual array of profiles
 
-      // Map profiles to assignees
+      console.log('Profiles response:', profilesData);
+      console.log('Profiles array:', profiles);
+
+      // Map profiles to match the Assignee interface structure like in leads
       const assignees: Assignee[] = profiles.map((profile) => ({
-        id: profile.user.id,
-        name:
-          profile.first_name && profile.last_name
-            ? `${profile.first_name} ${profile.last_name}`.trim()
-            : profile.user.email, // Fallback to email if no name
-        email: profile.user.email,
+        id: profile.id,
+        user_id: profile.user_id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone: profile.phone,
+        department: profile.department,
+        expo_tokens: Array.isArray(profile.expo_tokens)
+          ? profile.expo_tokens
+          : profile.expo_tokens
+          ? [profile.expo_tokens]
+          : null, // Handle both string and array
         avatar_url: profile.avatar_url,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+        user: profile.user,
       }));
 
+      console.log('Mapped assignees:', assignees);
       return assignees;
     } catch (error) {
+      console.error('Error fetching assignees:', error);
       if (error instanceof ApiError) {
         throw error;
       }

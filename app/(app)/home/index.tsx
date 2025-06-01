@@ -659,13 +659,6 @@ export default function AdminDashboardScreen() {
               color={showFilters ? colors.card : colors.text}
             />
           </TouchableOpacity>
-
-          {/* Only show add button for admins */}
-          {isAdmin && (
-            <TouchableOpacity style={styles.addButton}>
-              <Ionicons name="add" size={24} color={colors.card} />
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Status Filter Pills - Only show if showFilters is true */}
