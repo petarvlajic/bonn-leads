@@ -8,13 +8,13 @@ interface EnvironmentConfig {
 
 const ENV: Record<Environment, EnvironmentConfig> = {
   development: {
-    API_URL: 'https://ukb-lead-zentrale-main-cfppsh.laravel.cloud/api/v1',
+    API_URL: 'https://api.thebeatgoesbonn.de/api/v1',
   },
   staging: {
-    API_URL: 'https://cb-api.medialabs-co.com/api/v1',
+    API_URL: 'https://api.thebeatgoesbonn.de/api/v1',
   },
   production: {
-    API_URL: 'https://api.getpayper.app/api/v1',
+    API_URL: 'https://api.thebeatgoesbonn.de/api/v1',
   },
 };
 

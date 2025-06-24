@@ -199,9 +199,9 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.assigneeList}>
-              {assignees.map((assignee) => (
+              {assignees.map((assignee, index) => (
                 <TouchableOpacity
-                  key={assignee.id}
+                  key={assignee.id + index + '-lead'}
                   style={styles.assigneeItem}
                   onPress={() => handleAssigneeSelect(assignee.id)}
                 >
@@ -258,57 +258,60 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.statusList}>
-              {Object.entries(STATUS_NUMBER_MAP).map(([number, statusObj]) => {
-                const statusNumber = Number(number) as LeadStatusNumber;
-                const currentStatusLabel = getStatusLabel(lead.status);
-                const isCurrentStatus = currentStatusLabel === statusObj.label;
+              {Object.entries(STATUS_NUMBER_MAP)
+                .filter(([number]) => Number(number) !== 1) // Remove pending status
+                .map(([number, statusObj]) => {
+                  const statusNumber = Number(number) as LeadStatusNumber;
+                  const currentStatusLabel = getStatusLabel(lead.status);
+                  const isCurrentStatus =
+                    currentStatusLabel === statusObj.label;
 
-                return (
-                  <TouchableOpacity
-                    key={number}
-                    style={[
-                      styles.statusItem,
-                      isCurrentStatus && {
-                        backgroundColor: finalGetStatusBackgroundColor(
-                          statusObj.apiValue
-                        ),
-                      },
-                    ]}
-                    onPress={() => handleStatusSelect(statusNumber)}
-                  >
-                    <View style={styles.statusInfo}>
-                      <View
-                        style={[
-                          styles.statusIndicator,
-                          {
-                            backgroundColor: finalGetStatusColor(
-                              statusObj.apiValue
-                            ),
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.statusLabel,
-                          isCurrentStatus && {
-                            color: finalGetStatusColor(statusObj.apiValue),
-                            fontWeight: fontWeights.medium as any,
-                          },
-                        ]}
-                      >
-                        {statusObj.label}
-                      </Text>
-                    </View>
-                    {isCurrentStatus && (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={finalGetStatusColor(statusObj.apiValue)}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+                  return (
+                    <TouchableOpacity
+                      key={number}
+                      style={[
+                        styles.statusItem,
+                        isCurrentStatus && {
+                          backgroundColor: finalGetStatusBackgroundColor(
+                            statusObj.apiValue
+                          ),
+                        },
+                      ]}
+                      onPress={() => handleStatusSelect(statusNumber)}
+                    >
+                      <View style={styles.statusInfo}>
+                        <View
+                          style={[
+                            styles.statusIndicator,
+                            {
+                              backgroundColor: finalGetStatusColor(
+                                statusObj.apiValue
+                              ),
+                            },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.statusLabel,
+                            isCurrentStatus && {
+                              color: finalGetStatusColor(statusObj.apiValue),
+                              fontWeight: fontWeights.medium as any,
+                            },
+                          ]}
+                        >
+                          {statusObj.label}
+                        </Text>
+                      </View>
+                      {isCurrentStatus && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color={finalGetStatusColor(statusObj.apiValue)}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
             </View>
           </ScrollView>
         </View>

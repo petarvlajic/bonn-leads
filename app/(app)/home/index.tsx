@@ -64,15 +64,6 @@ const getStatusColor = (status: string): string => {
   // Normalize the status string to match our COLOR keys
   const statusStr = status.toLowerCase().trim().replace(/\s+/g, '_');
 
-  console.log(
-    'AdminDashboard - Getting color for status:',
-    status,
-    '-> normalized:',
-    statusStr,
-    '-> color:',
-    STATUS_COLORS[statusStr as keyof typeof STATUS_COLORS]
-  );
-
   return STATUS_COLORS[statusStr as keyof typeof STATUS_COLORS] || '#9CA3AF';
 };
 
@@ -101,6 +92,7 @@ const POLLING_INTERVAL = 20000; // 20 seconds
 export default function AdminDashboardScreen() {
   const { authState } = useAuth();
 
+  console.log(authState.user?.role, 'ROLE ');
   // Determine user mode based on role
   const userMode: 'admin' | 'user' =
     authState.user?.role.toLocaleLowerCase() === 'admin' ? 'admin' : 'user';
@@ -113,7 +105,7 @@ export default function AdminDashboardScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] =
     useState<StatusFilterKey>('All Status');
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [notificationsInitialized, setNotificationsInitialized] =
     useState(false);
 
@@ -124,6 +116,19 @@ export default function AdminDashboardScreen() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [totalLeads, setTotalLeads] = useState(0);
+
+  // Lead counts state
+  const [leadCounts, setLeadCounts] = useState<{
+    pending: number;
+    lead_assigned: number;
+    lead_not_reached: number;
+    lead_not_relevant: number;
+    meeting_arranged: number;
+    job_shadowing_hiring: number;
+    total: number;
+  } | null>(null);
+  const [loadingCounts, setLoadingCounts] = useState(false);
+  const [countsExpanded, setCountsExpanded] = useState(false);
 
   // Polling state
   const [isPolling, setIsPolling] = useState(false);
@@ -389,9 +394,30 @@ export default function AdminDashboardScreen() {
     }
   }, []);
 
+  // Fetch lead counts
+  const fetchLeadCounts = useCallback(async () => {
+    try {
+      setLoadingCounts(true);
+      const counts = await LeadsService.getLeadCounts();
+      if (isComponentMounted.current) {
+        setLeadCounts(counts);
+      }
+    } catch (error) {
+      console.error('Error fetching lead counts:', error);
+      if (isComponentMounted.current) {
+        showErrorAlert('Failed to Load', 'Could not fetch lead counts');
+      }
+    } finally {
+      if (isComponentMounted.current) {
+        setLoadingCounts(false);
+      }
+    }
+  }, []);
+
   // Initial load and start polling
   useEffect(() => {
     fetchLeads(1);
+    fetchLeadCounts();
     if (isAdmin) {
       fetchAssignees();
     }
@@ -437,7 +463,8 @@ export default function AdminDashboardScreen() {
   // Handle refresh
   const handleRefresh = useCallback(() => {
     fetchLeads(1, true);
-  }, [fetchLeads]);
+    fetchLeadCounts();
+  }, [fetchLeads, fetchLeadCounts]);
 
   // Handle load more
   const handleLoadMore = useCallback(() => {
@@ -523,7 +550,9 @@ export default function AdminDashboardScreen() {
 
     showConfirmAlert(
       'Unassign Lead',
-      `Remove "${getFullName(lead)}" from ${assigneeName}?`,
+      `Remove "${getFullName(lead)}" from ${
+        assigneeName || lead.assignee.first_name + ' ' + lead.assignee.last_name
+      }?`,
       async () => {
         setUnassigningLead(leadId);
 
@@ -649,9 +678,10 @@ export default function AdminDashboardScreen() {
 
           showSuccessAlert(
             'Notification Sent',
-            `${lead.assignee.name} has been notified about "${getFullName(
-              lead
-            )}"`
+            `${
+              lead.assignee.name ||
+              lead.assignee.first_name + ' ' + lead.assignee.last_name
+            } has been notified about "${getFullName(lead)}"`
           );
 
           console.log(`Notified assignee for lead ${leadId}`);
@@ -828,26 +858,6 @@ export default function AdminDashboardScreen() {
           </View>
         )}
 
-        {/* Polling status indicator */}
-        <View style={styles.pollingStatus}>
-          <View style={styles.pollingIndicator}>
-            <View
-              style={[
-                styles.pollingDot,
-                { backgroundColor: isPolling ? '#4CAF50' : '#FF9800' },
-              ]}
-            />
-            <Text style={styles.pollingText}>
-              {isPolling ? 'Auto-refresh active' : 'Auto-refresh paused'}
-            </Text>
-          </View>
-          {lastPolledAt && (
-            <Text style={styles.lastPolledText}>
-              Updated {formatLastPolled(lastPolledAt)}
-            </Text>
-          )}
-        </View>
-
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
             <Ionicons
@@ -880,6 +890,224 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Polling status indicator */}
+        <View style={styles.pollingStatus}>
+          <View style={styles.pollingIndicator}>
+            <View
+              style={[
+                styles.pollingDot,
+                { backgroundColor: isPolling ? '#4CAF50' : '#FF9800' },
+              ]}
+            />
+            <Text style={styles.pollingText}>
+              {isPolling ? 'Auto-refresh active' : 'Auto-refresh paused'}
+            </Text>
+          </View>
+          {lastPolledAt && (
+            <Text style={styles.lastPolledText}>
+              Updated {formatLastPolled(lastPolledAt)}
+            </Text>
+          )}
+        </View>
+
+        {/* Lead Counts Section */}
+        {loadingCounts ? (
+          <View style={styles.countsContainer}>
+            <TouchableOpacity
+              style={styles.countsHeader}
+              onPress={() => setCountsExpanded(!countsExpanded)}
+            >
+              <Text style={styles.countsTitle}>Lead Overview</Text>
+              <Ionicons
+                name={countsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <View style={styles.countsLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.countsLoadingText}>Loading counts...</Text>
+            </View>
+          </View>
+        ) : leadCounts ? (
+          <View style={styles.countsContainer}>
+            <TouchableOpacity
+              style={styles.countsHeader}
+              onPress={() => setCountsExpanded(!countsExpanded)}
+            >
+              <Text style={styles.countsTitle}>Lead Overview</Text>
+              <Ionicons
+                name={countsExpanded ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            {countsExpanded && (
+              <View style={styles.countsGrid}>
+                <View style={styles.countCard}>
+                  <Text style={styles.countNumber}>{leadCounts.total}</Text>
+                  <Text style={styles.countLabel}>Total</Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    { backgroundColor: getStatusBackgroundColor('pending') },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('pending') },
+                    ]}
+                  >
+                    {leadCounts.pending}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('pending') },
+                    ]}
+                  >
+                    Pending
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    {
+                      backgroundColor:
+                        getStatusBackgroundColor('lead_assigned'),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('lead_assigned') },
+                    ]}
+                  >
+                    {leadCounts.lead_assigned}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('lead_assigned') },
+                    ]}
+                  >
+                    Assigned
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    {
+                      backgroundColor:
+                        getStatusBackgroundColor('meeting_arranged'),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('meeting_arranged') },
+                    ]}
+                  >
+                    {leadCounts.meeting_arranged}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('meeting_arranged') },
+                    ]}
+                  >
+                    Meeting
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    {
+                      backgroundColor: getStatusBackgroundColor(
+                        'job_shadowing_hiring'
+                      ),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('job_shadowing_hiring') },
+                    ]}
+                  >
+                    {leadCounts.job_shadowing_hiring}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('job_shadowing_hiring') },
+                    ]}
+                  >
+                    Hiring
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    {
+                      backgroundColor:
+                        getStatusBackgroundColor('lead_not_reached'),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('lead_not_reached') },
+                    ]}
+                  >
+                    {leadCounts.lead_not_reached}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('lead_not_reached') },
+                    ]}
+                  >
+                    Not Reached
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.countCard,
+                    {
+                      backgroundColor:
+                        getStatusBackgroundColor('lead_not_relevant'),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countNumber,
+                      { color: getStatusColor('lead_not_relevant') },
+                    ]}
+                  >
+                    {leadCounts.lead_not_relevant}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countLabel,
+                      { color: getStatusColor('lead_not_relevant') },
+                    ]}
+                  >
+                    Not Relevant
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : null}
+
         {/* Status Filter Pills - Only show if showFilters is true */}
         {showFilters && (
           <View style={styles.statusFilterContainer}>
@@ -889,7 +1117,7 @@ export default function AdminDashboardScreen() {
 
               return (
                 <TouchableOpacity
-                  key={status}
+                  key={status + '-status-filter'}
                   style={[
                     styles.statusFilterButton,
                     isSelected && {
@@ -1243,5 +1471,67 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     marginRight: 4,
+  },
+  countsContainer: {
+    marginBottom: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  countsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  countsTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium as any,
+    color: colors.text,
+  },
+  countsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: spacing.xs,
+  },
+  countCard: {
+    flex: 1,
+    minWidth: '28%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.sm,
+    margin: spacing.xs / 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    minHeight: 60,
+  },
+  countNumber: {
+    fontSize: fontSizes.lg,
+    fontWeight: fontWeights.bold as any,
+    color: colors.text,
+    marginBottom: spacing.xs / 2,
+  },
+  countLabel: {
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontWeight: fontWeights.medium as any,
+  },
+  countsLoading: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  countsLoadingText: {
+    marginLeft: spacing.sm,
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
   },
 });

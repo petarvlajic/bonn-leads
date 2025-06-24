@@ -40,7 +40,7 @@ const AuthContext = createContext<{
   clearError: () => {},
 });
 
-export function useAuth() {
+export function ruseAuth() {
   return useContext(AuthContext);
 }
 
@@ -139,6 +139,7 @@ export default function AuthProvider({
       // Navigate to main app
       router.replace('../(app)/home');
     } catch (error: any) {
+      console.log(error);
       let errorMessage = 'Registration failed';
 
       if (error instanceof ApiError) {

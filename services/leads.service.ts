@@ -656,6 +656,46 @@ export class LeadsService {
   }
 
   /**
+   * Get lead counts by status
+   */
+  static async getLeadCounts(): Promise<{
+    pending: number;
+    lead_assigned: number;
+    lead_not_reached: number;
+    lead_not_relevant: number;
+    meeting_arranged: number;
+    job_shadowing_hiring: number;
+    total: number;
+  }> {
+    try {
+      const response = await fetchApi<{
+        pending: number;
+        lead_assigned: number;
+        lead_not_reached: number;
+        lead_not_relevant: number;
+        meeting_arranged: number;
+        job_shadowing_hiring: number;
+        total: number;
+      }>('/lead/counts', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new ApiError('Failed to fetch lead counts', response.statusCode);
+      }
+
+      return response.result;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Failed to fetch lead counts'
+      );
+    }
+  }
+
+  /**
    * Helper function to get status label from number
    */
   static getStatusLabel(statusNumber: LeadStatusNumber | string): string {
