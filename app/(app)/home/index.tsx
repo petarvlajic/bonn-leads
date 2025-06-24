@@ -314,8 +314,14 @@ export default function AdminDashboardScreen() {
           setLeads(response.leads);
           setCurrentPage(1);
         } else {
-          // Load more - append to existing leads
-          setLeads((prev) => [...prev, ...response.leads]);
+          // Load more - append to existing leads, but filter out duplicates
+          setLeads((prev) => {
+            const existingIds = new Set(prev.map((lead) => lead.id));
+            const newLeads = response.leads.filter(
+              (lead) => !existingIds.has(lead.id)
+            );
+            return [...prev, ...newLeads];
+          });
         }
 
         setHasNextPage(response.pagination.hasNextPage);
@@ -1176,7 +1182,7 @@ export default function AdminDashboardScreen() {
 
         <FlatList
           data={leads}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => `lead-${item.id}-${index}`}
           renderItem={({ item }) => (
             <LeadCard
               lead={item}
