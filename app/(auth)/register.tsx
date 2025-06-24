@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { colors, fontSizes, fontWeights, spacing } from '../../styles/theme';
@@ -34,33 +36,33 @@ export default function RegisterScreen() {
   // Show error alert when error occurs
   useEffect(() => {
     if (authState.error && !authState.loading && !isSubmitting) {
-      Alert.alert('Registration Failed', authState.error);
+      Alert.alert('Registrierung fehlgeschlagen', authState.error);
     }
   }, [authState.error, authState.loading, isSubmitting]);
 
   const validateForm = () => {
     // Basic validation
     if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Fehler', 'Bitte füllen Sie alle Felder aus');
       return false;
     }
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert('Fehler', 'Bitte geben Sie eine gültige E-Mail-Adresse ein');
       return false;
     }
 
     // Password length validation
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      Alert.alert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein');
       return false;
     }
 
     // Password match validation
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Fehler', 'Die Passwörter stimmen nicht überein');
       return false;
     }
 
@@ -85,78 +87,86 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Register" showBackButton />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <Header title="Registrieren" showBackButton />
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <Card style={styles.card}>
-          <Text style={styles.title}>Create an account</Text>
-          <Text style={styles.subtitle}>
-            Enter your details to create your account
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <Card style={styles.card}>
+            <Text style={styles.title}>Ein Konto erstellen</Text>
+            <Text style={styles.subtitle}>
+              Geben Sie Ihre Daten ein, um Ihr Konto zu erstellen
+            </Text>
 
-          <View style={styles.form}>
-            <Input
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="name@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
-              editable={!authState.loading}
-            />
+            <View style={styles.form}>
+              <Input
+                label="E-Mail"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                editable={!authState.loading}
+              />
 
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              secureTextEntry
-              autoComplete="new-password"
-              textContentType="newPassword"
-              editable={!authState.loading}
-            />
+              <Input
+                label="Passwort"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+                editable={!authState.loading}
+              />
 
-            <Input
-              label="Confirm Password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="••••••••"
-              secureTextEntry
-              autoComplete="new-password"
-              textContentType="newPassword"
-              editable={!authState.loading}
-            />
+              <Input
+                label="Passwort bestätigen"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="••••••••"
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+                editable={!authState.loading}
+              />
 
-            <Button
-              title="Register"
-              onPress={handleRegister}
-              isLoading={authState.loading || isSubmitting}
-              style={styles.registerButton}
-              disabled={authState.loading || isSubmitting}
-            />
+              <Button
+                title="Registrieren"
+                onPress={handleRegister}
+                isLoading={authState.loading || isSubmitting}
+                style={styles.registerButton}
+                disabled={authState.loading || isSubmitting}
+              />
+            </View>
+          </Card>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Haben Sie bereits ein Konto? </Text>
+            <Link href="/(auth)/login" asChild>
+              <TouchableOpacity disabled={authState.loading || isSubmitting}>
+                <Text
+                  style={[
+                    styles.loginLink,
+                    (authState.loading || isSubmitting) && styles.linkDisabled,
+                  ]}
+                >
+                  Anmelden
+                </Text>
+              </TouchableOpacity>
+            </Link>
           </View>
-        </Card>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity disabled={authState.loading || isSubmitting}>
-              <Text
-                style={[
-                  styles.loginLink,
-                  (authState.loading || isSubmitting) && styles.linkDisabled,
-                ]}
-              >
-                Login
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -166,10 +176,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    minHeight: '100%',
   },
   card: {
     padding: spacing.xl,

@@ -89,18 +89,17 @@ export interface AdvancedLeadFilters {
   page?: number;
   per_page?: number;
   filters?: LeadFilter[];
-  search_term?: string; // Add search_term parameter
+  search_term?: string;
 }
 
-// Lead status options with labels and API names
+// Updated Lead status options to match backend expectations
 export const LEAD_STATUSES = {
   1: { label: 'Pending', apiName: 'pending' },
   2: { label: 'Lead Assigned', apiName: 'lead_assigned' },
-  3: { label: 'Lead Contacted', apiName: 'lead_contacted' },
-  4: { label: 'Waiting Recall', apiName: 'waiting_recall' },
-  5: { label: 'Interview Arranged', apiName: 'interview_arranged' },
-  6: { label: 'Finished', apiName: 'finished' },
-  7: { label: 'Not Interested', apiName: 'not_interested' }, // Added missing status
+  3: { label: 'Lead Not Reached', apiName: 'lead_not_reached' },
+  4: { label: 'Lead Not Relevant', apiName: 'lead_not_relevant' },
+  5: { label: 'Meeting Arranged', apiName: 'meeting_arranged' },
+  6: { label: 'Job Shadowing/Hiring', apiName: 'job_shadowing_hiring' },
 } as const;
 
 export type LeadStatusNumber = keyof typeof LEAD_STATUSES;
@@ -306,6 +305,8 @@ export class LeadsService {
     try {
       // Get the API name for the status
       const statusApiName = LEAD_STATUSES[statusNumber].apiName;
+
+      console.log(`Changing lead ${leadId} status to: ${statusApiName}`);
 
       const response = await fetchApi<{ data: Lead; message: string }>(
         `/lead/${leadId}/change_status/${statusApiName}`,
@@ -611,6 +612,7 @@ export class LeadsService {
     return LeadsService.getLeadsAdvanced({
       ...otherFilters,
       filters,
+      search_term: query, // Add search_term here too
     });
   }
 
@@ -656,8 +658,16 @@ export class LeadsService {
   /**
    * Helper function to get status label from number
    */
-  static getStatusLabel(statusNumber: LeadStatusNumber): LeadStatusLabel {
-    return LEAD_STATUSES[statusNumber].label;
+  static getStatusLabel(statusNumber: LeadStatusNumber | string): string {
+    // Handle both number and string inputs
+    if (typeof statusNumber === 'string') {
+      // If it's already a string status, format it nicely
+      return statusNumber
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+
+    return LEAD_STATUSES[statusNumber as LeadStatusNumber]?.label || 'Unknown';
   }
 
   /**
@@ -673,6 +683,18 @@ export class LeadsService {
   static getStatusNumber(label: LeadStatusLabel): LeadStatusNumber {
     const entry = Object.entries(LEAD_STATUSES).find(
       ([_, value]) => value.label === label
+    );
+    return entry ? (Number(entry[0]) as LeadStatusNumber) : 1;
+  }
+
+  /**
+   * Helper function to get status number from API name
+   */
+  static getStatusNumberFromApiName(
+    apiName: LeadStatusApiName
+  ): LeadStatusNumber {
+    const entry = Object.entries(LEAD_STATUSES).find(
+      ([_, value]) => value.apiName === apiName
     );
     return entry ? (Number(entry[0]) as LeadStatusNumber) : 1;
   }

@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { colors, fontSizes, fontWeights, spacing } from '../../styles/theme';
@@ -77,90 +79,98 @@ export default function LoginScreen() {
 
   const handleForgotPassword = () => {
     Alert.alert(
-      'Forgot Password',
-      'Password reset functionality will be implemented soon.',
+      'Passwort vergessen',
+      'Die Funktion zum Zurücksetzen des Passworts wird bald implementiert.',
       [{ text: 'OK' }]
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Login" showBackButton />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <Header title="Anmelden" showBackButton />
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <Card style={styles.card}>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>
-            Enter your credentials to access your account
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <Card style={styles.card}>
+            <Text style={styles.title}>Willkommen zurück</Text>
+            <Text style={styles.subtitle}>
+              Geben Sie Ihre Zugangsdaten ein, um auf Ihr Konto zuzugreifen
+            </Text>
 
-          <View style={styles.form}>
-            <Input
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="name@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
-              editable={!authState.loading}
-            />
+            <View style={styles.form}>
+              <Input
+                label="E-Mail"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                editable={!authState.loading}
+              />
 
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              secureTextEntry
-              autoComplete="current-password"
-              textContentType="password"
-              editable={!authState.loading}
-            />
+              <Input
+                label="Passwort"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry
+                autoComplete="current-password"
+                textContentType="password"
+                editable={!authState.loading}
+              />
 
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={handleForgotPassword}
-              disabled={authState.loading || isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.forgotPasswordText,
-                  (authState.loading || isSubmitting) && styles.linkDisabled,
-                ]}
+              <TouchableOpacity
+                style={styles.forgotPassword}
+                onPress={handleForgotPassword}
+                disabled={authState.loading || isSubmitting}
               >
-                Forgot password?
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.forgotPasswordText,
+                    (authState.loading || isSubmitting) && styles.linkDisabled,
+                  ]}
+                >
+                  Passwort vergessen?
+                </Text>
+              </TouchableOpacity>
 
-            <Button
-              title="Login"
-              onPress={handleLogin}
-              isLoading={authState.loading || isSubmitting}
-              style={styles.loginButton}
-              disabled={authState.loading || isSubmitting}
-            />
+              <Button
+                title="Anmelden"
+                onPress={handleLogin}
+                isLoading={authState.loading || isSubmitting}
+                style={styles.loginButton}
+                disabled={authState.loading || isSubmitting}
+              />
+            </View>
+          </Card>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Sie haben noch kein Konto? </Text>
+            <Link href="/(auth)/register" asChild>
+              <TouchableOpacity disabled={authState.loading || isSubmitting}>
+                <Text
+                  style={[
+                    styles.registerLink,
+                    (authState.loading || isSubmitting) && styles.linkDisabled,
+                  ]}
+                >
+                  Registrieren
+                </Text>
+              </TouchableOpacity>
+            </Link>
           </View>
-        </Card>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href="/(auth)/register" asChild>
-            <TouchableOpacity disabled={authState.loading || isSubmitting}>
-              <Text
-                style={[
-                  styles.registerLink,
-                  (authState.loading || isSubmitting) && styles.linkDisabled,
-                ]}
-              >
-                Register
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -170,10 +180,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    minHeight: '100%',
   },
   card: {
     padding: spacing.xl,

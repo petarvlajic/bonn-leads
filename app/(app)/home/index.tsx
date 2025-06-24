@@ -38,18 +38,65 @@ const getFullName = (lead: Lead): string => {
   return `${lead.first_name} ${lead.last_name}`.trim();
 };
 
-// Status mapping for filters (display name to API value)
-const STATUS_FILTER_MAP = {
+// Updated Status mapping for filters to match backend expectations
+export const STATUS_FILTER_MAP = {
   'All Status': null, // No filter
   Pending: 'pending',
   'Lead Assigned': 'lead_assigned',
-  'Lead Contacted': 'lead_contacted',
-  'Waiting Recall': 'waiting_recall',
-  'Interview Arranged': 'interview_arranged',
-  Finished: 'finished',
+  'Lead Not Reached': 'lead_not_reached',
+  'Lead Not Relevant': 'lead_not_relevant',
+  'Meeting Arranged': 'meeting_arranged',
+  'Job Shadowing/Hiring': 'job_shadowing_hiring',
 } as const;
 
+// Updated Status color mapping to match backend status names
+export const STATUS_COLORS = {
+  pending: '#9CA3AF', // Gray for pending
+  lead_assigned: '#FFC107', // Yellow
+  lead_not_reached: '#FF9800', // Orange
+  lead_not_relevant: '#F44336', // Red
+  meeting_arranged: '#2196F3', // Blue
+  job_shadowing_hiring: '#4CAF50', // Green
+} as const;
+
+// Helper function to get status color
+const getStatusColor = (status: string): string => {
+  // Normalize the status string to match our COLOR keys
+  const statusStr = status.toLowerCase().trim().replace(/\s+/g, '_');
+
+  console.log(
+    'AdminDashboard - Getting color for status:',
+    status,
+    '-> normalized:',
+    statusStr,
+    '-> color:',
+    STATUS_COLORS[statusStr as keyof typeof STATUS_COLORS]
+  );
+
+  return STATUS_COLORS[statusStr as keyof typeof STATUS_COLORS] || '#9CA3AF';
+};
+
+// Helper function to get status background color (lighter version)
+const getStatusBackgroundColor = (status: string): string => {
+  const colors = {
+    pending: '#F3F4F6',
+    lead_assigned: '#FFF8E1',
+    lead_not_reached: '#FFF3E0',
+    lead_not_relevant: '#FFEBEE',
+    meeting_arranged: '#E3F2FD',
+    job_shadowing_hiring: '#E8F5E8',
+  };
+
+  // Normalize the status string to match our COLOR keys
+  const statusStr = status.toLowerCase().trim().replace(/\s+/g, '_');
+
+  return colors[statusStr as keyof typeof colors] || '#F3F4F6';
+};
+
 type StatusFilterKey = keyof typeof STATUS_FILTER_MAP;
+
+// Polling configuration
+const POLLING_INTERVAL = 20000; // 20 seconds
 
 export default function AdminDashboardScreen() {
   const { authState } = useAuth();
@@ -78,6 +125,10 @@ export default function AdminDashboardScreen() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [totalLeads, setTotalLeads] = useState(0);
 
+  // Polling state
+  const [isPolling, setIsPolling] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
+
   // Operation loading states
   const [assigningLead, setAssigningLead] = useState<number | null>(null);
   const [unassigningLead, setUnassigningLead] = useState<number | null>(null);
@@ -89,11 +140,12 @@ export default function AdminDashboardScreen() {
   // Error state
   const [error, setError] = useState<string | null>(null);
 
+  // Refs
   const notificationListener = useRef<Notifications.Subscription>();
   const responseListener = useRef<Notifications.Subscription>();
-
-  // Debounced search
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const pollingIntervalRef = useRef<NodeJS.Timeout>();
+  const isComponentMounted = useRef(true);
 
   // Enhanced Alert function with better UX
   const showSuccessAlert = (title: string, message: string) => {
@@ -122,12 +174,12 @@ export default function AdminDashboardScreen() {
       message,
       [
         {
-          text: 'Cancel',
+          text: 'Abbrechen',
           style: 'cancel',
           onPress: onCancel,
         },
         {
-          text: 'Confirm',
+          text: 'Bestätigen',
           style: 'default',
           onPress: onConfirm,
         },
@@ -136,12 +188,39 @@ export default function AdminDashboardScreen() {
     );
   };
 
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    isComponentMounted.current = false;
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (notificationListener.current) {
+      NotificationService.removeNotificationSubscription(
+        notificationListener.current
+      );
+    }
+
+    if (responseListener.current) {
+      NotificationService.removeNotificationSubscription(
+        responseListener.current
+      );
+    }
+  }, []);
+
   // Initialize notifications when component mounts
   useEffect(() => {
     const initializeNotifications = async () => {
       try {
         const success = await NotificationService.initializeNotifications();
-        setNotificationsInitialized(success);
+        if (isComponentMounted.current) {
+          setNotificationsInitialized(success);
+        }
 
         if (success) {
           console.log('Notifications initialized successfully');
@@ -176,30 +255,17 @@ export default function AdminDashboardScreen() {
         }
       );
 
-    // Cleanup listeners on unmount
-    return () => {
-      if (notificationListener.current) {
-        NotificationService.removeNotificationSubscription(
-          notificationListener.current
-        );
-      }
-      if (responseListener.current) {
-        NotificationService.removeNotificationSubscription(
-          responseListener.current
-        );
-      }
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
+    // Cleanup on unmount
+    return cleanup;
+  }, [cleanup]);
 
   // Fetch leads function using LeadsService with advanced filters
   const fetchLeads = useCallback(
     async (
       page: number = 1,
       isRefresh: boolean = false,
-      isLoadMore: boolean = false
+      isLoadMore: boolean = false,
+      isPollingUpdate: boolean = false
     ) => {
       try {
         if (isRefresh) {
@@ -207,7 +273,7 @@ export default function AdminDashboardScreen() {
           setError(null);
         } else if (isLoadMore) {
           setLoadingMore(true);
-        } else if (page === 1) {
+        } else if (page === 1 && !isPollingUpdate) {
           setLoading(true);
           setError(null);
         }
@@ -236,6 +302,9 @@ export default function AdminDashboardScreen() {
           search_term: searchQuery.trim() || undefined, // Add search_term parameter
         });
 
+        // Only update state if component is still mounted
+        if (!isComponentMounted.current) return;
+
         if (isRefresh || page === 1) {
           setLeads(response.leads);
           setCurrentPage(1);
@@ -248,46 +317,97 @@ export default function AdminDashboardScreen() {
         setTotalLeads(response.pagination.total);
         setCurrentPage(response.pagination.currentPage);
 
-        // Show success message for refresh
-        if (isRefresh) {
+        // Update last polled timestamp
+        if (isPollingUpdate) {
+          setLastPolledAt(new Date());
+        }
+
+        // Show success message for refresh (but not for polling)
+        if (isRefresh && !isPollingUpdate) {
           showSuccessAlert('Refreshed', 'Leads updated successfully');
         }
       } catch (error) {
         console.error('Error fetching leads:', error);
         const errorMessage =
           error instanceof Error ? error.message : 'Failed to fetch leads';
-        setError(errorMessage);
 
-        if (!isRefresh && !isLoadMore) {
-          showErrorAlert('Failed to Load', errorMessage);
+        if (isComponentMounted.current) {
+          setError(errorMessage);
+
+          // Only show error alert for user-initiated actions, not polling
+          if (!isRefresh && !isLoadMore && !isPollingUpdate) {
+            showErrorAlert('Failed to Load', errorMessage);
+          }
         }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
-        setLoadingMore(false);
+        if (isComponentMounted.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
       }
     },
     [selectedStatus, searchQuery]
   );
 
+  // Polling function
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    setIsPolling(true);
+
+    pollingIntervalRef.current = setInterval(() => {
+      if (isComponentMounted.current) {
+        console.log('Polling for leads updates...');
+        fetchLeads(1, false, false, true); // isPollingUpdate = true
+      }
+    }, POLLING_INTERVAL);
+  }, [fetchLeads]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = undefined;
+    }
+    setIsPolling(false);
+  }, []);
+
   // Fetch assignees
   const fetchAssignees = useCallback(async () => {
     try {
       const assigneesList = await LeadsService.getAssignees();
-      setAssignees(assigneesList);
+      if (isComponentMounted.current) {
+        setAssignees(assigneesList);
+      }
     } catch (error) {
       console.error('Error fetching assignees:', error);
-      showErrorAlert('Failed to Load', 'Could not fetch assignees list');
+      if (isComponentMounted.current) {
+        showErrorAlert('Failed to Load', 'Could not fetch assignees list');
+      }
     }
   }, []);
 
-  // Initial load
+  // Initial load and start polling
   useEffect(() => {
     fetchLeads(1);
     if (isAdmin) {
       fetchAssignees();
     }
-  }, [isAdmin]);
+
+    // Start polling after initial load
+    const pollingTimeout = setTimeout(() => {
+      if (isComponentMounted.current) {
+        startPolling();
+      }
+    }, 1000);
+
+    return () => {
+      clearTimeout(pollingTimeout);
+      stopPolling();
+    };
+  }, [isAdmin, startPolling, stopPolling]);
 
   // Handle search with debouncing
   useEffect(() => {
@@ -338,7 +458,9 @@ export default function AdminDashboardScreen() {
 
     showConfirmAlert(
       'Assign Lead',
-      `Assign "${getFullName(lead)}" to ${assignee.name}?`,
+      `Assign "${getFullName(lead)}" to ${
+        assignee.first_name + ' ' + assignee.last_name || assignee.name
+      }?`,
       async () => {
         setAssigningLead(leadId);
 
@@ -360,7 +482,9 @@ export default function AdminDashboardScreen() {
 
           showSuccessAlert(
             'Assignment Successful',
-            `"${getFullName(lead)}" has been assigned to ${assignee.name}`
+            `"${getFullName(lead)}" has been assigned to ${
+              assignee.first_name + ' ' + assignee.last_name || assignee.name
+            }`
           );
         } catch (error) {
           console.error('Error assigning lead:', error);
@@ -459,10 +583,11 @@ export default function AdminDashboardScreen() {
         setChangingStatus(leadId);
 
         try {
-          // Optimistic update
+          // Optimistic update with the API name instead of label
+          const statusApiName = LeadsService.getStatusApiName(statusNumber);
           setLeads((prevLeads) =>
             prevLeads.map((lead) =>
-              lead.id === leadId ? { ...lead, status: statusLabel } : lead
+              lead.id === leadId ? { ...lead, status: statusApiName } : lead
             )
           );
 
@@ -513,9 +638,9 @@ export default function AdminDashboardScreen() {
 
     showConfirmAlert(
       'Send Notification',
-      `Send notification to ${lead.assignee.name} about "${getFullName(
-        lead
-      )}"?`,
+      `Send notification to ${
+        lead.assignee.first_name + ' ' + lead.assignee.last_name
+      } about "${getFullName(lead)}"?`,
       async () => {
         setNotifyingAssignee(leadId);
 
@@ -561,27 +686,101 @@ export default function AdminDashboardScreen() {
   };
 
   const handleRetryNotifications = async () => {
-    const success = await NotificationService.initializeNotifications();
-    setNotificationsInitialized(success);
+    try {
+      const { success, error } =
+        await NotificationService.initializeNotifications();
+      setNotificationsInitialized(success);
 
-    if (success) {
-      showSuccessAlert('Success', 'Notifications enabled successfully!');
-    } else {
-      showErrorAlert(
-        'Error',
-        'Failed to enable notifications. Please check your settings.'
-      );
+      if (success) {
+        showSuccessAlert('Erfolg', 'Benachrichtigungen erfolgreich aktiviert!');
+      } else {
+        showErrorAlert(
+          'Fehler',
+          error ||
+            'Benachrichtigungen konnten nicht aktiviert werden. Bitte überprüfen Sie Ihre Einstellungen.'
+        );
+      }
+    } catch (error) {
+      console.log('Error initializing notifications:', error);
+      showErrorAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
     }
+  };
+
+  // Format last polled time
+  const formatLastPolled = (date: Date | null) => {
+    if (!date) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+
+    if (diffSecs < 60) {
+      return `${diffSecs}s ago`;
+    } else if (diffSecs < 3600) {
+      return `${Math.floor(diffSecs / 60)}m ago`;
+    } else {
+      return date.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+  };
+
+  // Status Badge Component
+  const StatusBadge = ({ status }: { status: string }) => {
+    // Helper function to format status for display
+    const formatStatusLabel = (status: string): string => {
+      if (!status) return 'Unknown';
+
+      // Use LeadsService.getStatusLabel for consistent formatting
+      try {
+        if (
+          LeadsService.getStatusLabel &&
+          typeof LeadsService.getStatusLabel === 'function'
+        ) {
+          const label = LeadsService.getStatusLabel(status);
+          if (label && label !== 'Unknown') {
+            return label;
+          }
+        }
+      } catch (error) {
+        console.warn('Error using LeadsService.getStatusLabel:', error);
+      }
+
+      // Fallback: format the status string manually
+      return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    };
+
+    return (
+      <View
+        style={[
+          styles.statusBadge,
+          {
+            backgroundColor: getStatusBackgroundColor(status),
+            borderColor: getStatusColor(status),
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.statusDot,
+            { backgroundColor: getStatusColor(status) },
+          ]}
+        />
+        <Text style={[styles.statusText, { color: getStatusColor(status) }]}>
+          {formatStatusLabel(status)}
+        </Text>
+      </View>
+    );
   };
 
   // Render loading state
   if (loading && leads?.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header title={isAdmin ? 'Admin Dashboard' : 'My Leads'} />
+        <Header title={isAdmin ? 'Admin-Dashboard' : 'Meine Leads'} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading leads...</Text>
+          <Text style={styles.loadingText}>Leads werden geladen...</Text>
         </View>
       </SafeAreaView>
     );
@@ -591,20 +790,20 @@ export default function AdminDashboardScreen() {
   if (error && leads.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header title={isAdmin ? 'Admin Dashboard' : 'My Leads'} />
+        <Header title={isAdmin ? 'Admin-Dashboard' : 'Meine Leads'} />
         <View style={styles.errorContainer}>
           <Ionicons
             name="alert-circle-outline"
             size={60}
             color={colors.error}
           />
-          <Text style={styles.errorText}>Failed to load leads</Text>
+          <Text style={styles.errorText}>Fehler beim Laden der Leads</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => fetchLeads(1)}
           >
-            <Text style={styles.retryButtonText}>Try Again</Text>
+            <Text style={styles.retryButtonText}>Erneut versuchen</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -613,7 +812,7 @@ export default function AdminDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title={isAdmin ? 'Admin Dashboard' : 'My Leads'} />
+      <Header title={isAdmin ? 'Admin-Dashboard' : 'Meine Leads'} />
 
       <View style={styles.content}>
         {/* Notification status indicator */}
@@ -621,13 +820,33 @@ export default function AdminDashboardScreen() {
           <View style={styles.notificationWarning}>
             <Ionicons name="warning-outline" size={20} color="#FFC107" />
             <Text style={styles.notificationWarningText}>
-              Notifications not enabled
+              Benachrichtigungen nicht aktiviert
             </Text>
             <TouchableOpacity onPress={handleRetryNotifications}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>Erneut versuchen</Text>
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Polling status indicator */}
+        <View style={styles.pollingStatus}>
+          <View style={styles.pollingIndicator}>
+            <View
+              style={[
+                styles.pollingDot,
+                { backgroundColor: isPolling ? '#4CAF50' : '#FF9800' },
+              ]}
+            />
+            <Text style={styles.pollingText}>
+              {isPolling ? 'Auto-refresh active' : 'Auto-refresh paused'}
+            </Text>
+          </View>
+          {lastPolledAt && (
+            <Text style={styles.lastPolledText}>
+              Updated {formatLastPolled(lastPolledAt)}
+            </Text>
+          )}
+        </View>
 
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
@@ -639,7 +858,7 @@ export default function AdminDashboardScreen() {
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search leads..."
+              placeholder="Leads suchen..."
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholderTextColor={colors.textSecondary}
@@ -664,37 +883,61 @@ export default function AdminDashboardScreen() {
         {/* Status Filter Pills - Only show if showFilters is true */}
         {showFilters && (
           <View style={styles.statusFilterContainer}>
-            {Object.keys(STATUS_FILTER_MAP).map((status) => (
-              <TouchableOpacity
-                key={status}
-                style={[
-                  styles.statusFilterButton,
-                  selectedStatus === status && styles.statusFilterButtonActive,
-                ]}
-                onPress={() => setSelectedStatus(status as StatusFilterKey)}
-              >
-                <Text
+            {Object.keys(STATUS_FILTER_MAP).map((status) => {
+              const statusValue = STATUS_FILTER_MAP[status as StatusFilterKey];
+              const isSelected = selectedStatus === status;
+
+              return (
+                <TouchableOpacity
+                  key={status}
                   style={[
-                    styles.statusFilterText,
-                    selectedStatus === status && styles.statusFilterTextActive,
+                    styles.statusFilterButton,
+                    isSelected && {
+                      backgroundColor: statusValue
+                        ? getStatusBackgroundColor(statusValue)
+                        : colors.primary,
+                      borderColor: statusValue
+                        ? getStatusColor(statusValue)
+                        : colors.primary,
+                    },
                   ]}
+                  onPress={() => setSelectedStatus(status as StatusFilterKey)}
                 >
-                  {status}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  {statusValue && (
+                    <View
+                      style={[
+                        styles.filterStatusDot,
+                        { backgroundColor: getStatusColor(statusValue) },
+                      ]}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.statusFilterText,
+                      isSelected && {
+                        color: statusValue
+                          ? getStatusColor(statusValue)
+                          : colors.card,
+                      },
+                    ]}
+                  >
+                    {status}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
         <Text style={styles.leadsCount}>
-          {totalLeads} leads
+          {totalLeads} Leads
           {(selectedStatus !== 'All Status' || searchQuery.trim()) && (
             <Text style={styles.filterIndicator}>
               {' '}
               (
               {[
-                searchQuery.trim() && `search: "${searchQuery.trim()}"`,
-                selectedStatus !== 'All Status' && `status: ${selectedStatus}`,
+                searchQuery.trim() && `Suche: "${searchQuery.trim()}"`,
+                selectedStatus !== 'All Status' && `Status: ${selectedStatus}`,
               ]
                 .filter(Boolean)
                 .join(', ')}
@@ -727,6 +970,10 @@ export default function AdminDashboardScreen() {
               }
               onNotify={isAdmin ? () => handleNotify(item.id) : undefined}
               onCall={!isAdmin ? () => handleCall(item.id) : undefined}
+              StatusBadge={StatusBadge}
+              getStatusColor={getStatusColor}
+              getStatusBackgroundColor={getStatusBackgroundColor}
+              statusFilterMap={STATUS_FILTER_MAP}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -756,11 +1003,11 @@ export default function AdminDashboardScreen() {
                 size={60}
                 color={colors.textSecondary}
               />
-              <Text style={styles.emptyText}>No leads found</Text>
+              <Text style={styles.emptyText}>Keine Leads gefunden</Text>
               <Text style={styles.emptySubtext}>
                 {searchQuery.trim() || selectedStatus !== 'All Status'
-                  ? 'Try adjusting your search or filters'
-                  : 'No leads available'}
+                  ? 'Passen Sie Ihre Suche oder Filter an'
+                  : 'Keine Leads verfügbar'}
               </Text>
             </View>
           }
@@ -841,6 +1088,37 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium as any,
   },
+  pollingStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  pollingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pollingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: spacing.xs,
+  },
+  pollingText: {
+    fontSize: fontSizes.sm,
+    color: colors.text,
+    fontWeight: fontWeights.medium as any,
+  },
+  lastPolledText: {
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -878,22 +1156,14 @@ const styles = StyleSheet.create({
   filterButtonActive: {
     backgroundColor: colors.primary,
   },
-  addButton: {
-    marginLeft: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.sm,
-  },
   statusFilterContainer: {
     flexDirection: 'row',
     marginBottom: spacing.md,
     flexWrap: 'wrap',
   },
   statusFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     borderRadius: borderRadius.full,
@@ -903,16 +1173,15 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
     marginBottom: spacing.xs,
   },
-  statusFilterButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
   statusFilterText: {
     fontSize: fontSizes.sm,
     color: colors.text,
   },
-  statusFilterTextActive: {
-    color: colors.card,
+  filterStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: spacing.xs,
   },
   leadsCount: {
     fontSize: fontSizes.md,
@@ -954,5 +1223,25 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+  },
+  // Status Badge Styles
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
   },
 });

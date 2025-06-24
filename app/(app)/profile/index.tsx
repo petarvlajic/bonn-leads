@@ -78,21 +78,21 @@ export default function ProfileScreen() {
       !isSubmitting &&
       !isUploadingPhoto
     ) {
-      Alert.alert('Update Failed', authState.error);
+      Alert.alert('Aktualisierung fehlgeschlagen', authState.error);
     }
   }, [authState.error, authState.loading, isSubmitting, isUploadingPhoto]);
 
   const validateForm = () => {
     if (!firstName.trim()) {
-      Alert.alert('Error', 'First name is required');
+      Alert.alert('Fehler', 'Vorname ist erforderlich');
       return false;
     }
     if (!lastName.trim()) {
-      Alert.alert('Error', 'Last name is required');
+      Alert.alert('Fehler', 'Nachname ist erforderlich');
       return false;
     }
     if (!phoneNumber.trim()) {
-      Alert.alert('Error', 'Phone number is required');
+      Alert.alert('Fehler', 'Telefonnummer ist erforderlich');
       return false;
     }
     return true;
@@ -132,7 +132,7 @@ export default function ProfileScreen() {
       setIsEditing(false);
       setSelectedAvatarUri(null); // Clear selected avatar
 
-      Alert.alert('Success', 'Profile updated successfully', [
+      Alert.alert('Erfolg', 'Profil erfolgreich aktualisiert', [
         {
           text: 'OK',
           onPress: () => {
@@ -143,7 +143,10 @@ export default function ProfileScreen() {
       ]);
     } catch (error) {
       console.error('Profile update error:', error);
-      Alert.alert('Update Failed', error.message || 'Failed to update profile');
+      Alert.alert(
+        'Update Failed',
+        (error as any).message || 'Failed to update profile'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -176,8 +179,8 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('Photo selection error:', error);
       Alert.alert(
-        'Selection Failed',
-        'Failed to select photo. Please try again.'
+        'Auswahl fehlgeschlagen',
+        'Foto konnte nicht ausgewählt werden. Bitte versuchen Sie es erneut.'
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -185,19 +188,22 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
+    Alert.alert('Abmelden', 'Möchten Sie sich wirklich abmelden?', [
       {
-        text: 'Cancel',
+        text: 'Abbrechen',
         style: 'cancel',
       },
       {
-        text: 'Logout',
+        text: 'Abmelden',
         onPress: async () => {
           try {
             await logout();
           } catch (error) {
             console.error('Logout error:', error);
-            Alert.alert('Error', 'Failed to logout. Please try again.');
+            Alert.alert(
+              'Fehler',
+              'Abmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.'
+            );
           }
         },
         style: 'destructive',
@@ -226,13 +232,13 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="My Profile" />
+      <Header title="Mein Profil" />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <Card style={styles.card}>
-          <Text style={styles.title}>Profile Information</Text>
+          <Text style={styles.title}>Profilinformationen</Text>
 
           <View style={styles.profileImageContainer}>
             {getDisplayImage() ? (
@@ -267,12 +273,12 @@ export default function ProfileScreen() {
           </View>
 
           {isUploadingPhoto && (
-            <Text style={styles.uploadingText}>Selecting photo...</Text>
+            <Text style={styles.uploadingText}>Foto wird ausgewählt...</Text>
           )}
 
           {selectedAvatarUri && isEditing && (
             <Text style={styles.selectedPhotoText}>
-              New photo selected! Save changes to update.
+              Neues Foto ausgewählt! Änderungen speichern, um zu aktualisieren.
             </Text>
           )}
 
@@ -280,26 +286,26 @@ export default function ProfileScreen() {
             <View style={styles.nameRow}>
               <View style={styles.nameField}>
                 <Input
-                  label="First Name"
+                  label="Vorname"
                   value={firstName}
                   onChangeText={setFirstName}
                   editable={isEditing}
-                  placeholder="Enter first name"
+                  placeholder="Vorname eingeben"
                 />
               </View>
               <View style={styles.nameField}>
                 <Input
-                  label="Last Name"
+                  label="Nachname"
                   value={lastName}
                   onChangeText={setLastName}
                   editable={isEditing}
-                  placeholder="Enter last name"
+                  placeholder="Nachname eingeben"
                 />
               </View>
             </View>
 
             <Input
-              label="Email"
+              label="E-Mail"
               value={email}
               onChangeText={() => {}} // Email is read-only
               keyboardType="email-address"
@@ -315,16 +321,16 @@ export default function ProfileScreen() {
             />
 
             <Input
-              label="Phone Number"
+              label="Telefonnummer"
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"
               editable={isEditing}
-              placeholder="Enter phone number"
+              placeholder="Telefonnummer eingeben"
             />
 
             <Input
-              label="Role"
+              label="Rolle"
               value={role}
               onChangeText={handleRoleChange}
               editable={false}
@@ -341,7 +347,7 @@ export default function ProfileScreen() {
               {isEditing ? (
                 <>
                   <Button
-                    title="Save Changes"
+                    title="Änderungen speichern"
                     onPress={handleSaveChanges}
                     isLoading={authState.loading || isSubmitting}
                     style={styles.saveButton}
@@ -350,7 +356,7 @@ export default function ProfileScreen() {
                     }
                   />
                   <Button
-                    title="Cancel"
+                    title="Abbrechen"
                     onPress={handleCancelEdit}
                     variant="outline"
                     style={styles.cancelButton}
@@ -361,7 +367,7 @@ export default function ProfileScreen() {
                 </>
               ) : (
                 <Button
-                  title="Edit Profile"
+                  title="Profil bearbeiten"
                   onPress={() => setIsEditing(true)}
                   variant="outline"
                   style={styles.editButton}
@@ -369,7 +375,7 @@ export default function ProfileScreen() {
                 />
               )}
               <Button
-                title="Logout"
+                title="Abmelden"
                 onPress={handleLogout}
                 variant={isEditing ? 'link' : 'outline'}
                 style={styles.logoutButton}

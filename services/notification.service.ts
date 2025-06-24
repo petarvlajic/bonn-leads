@@ -17,6 +17,7 @@ export class NotificationService {
    * Register for push notifications and get Expo push token
    */
   static async registerForPushNotifications(): Promise<string | null> {
+    console.debug('Registering for push notifications...');
     try {
       // Check if device supports notifications
       if (!Device.isDevice) {
@@ -27,12 +28,18 @@ export class NotificationService {
       // Check existing permissions
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
+      console.debug(
+        'Existing notification permissions status:',
+        existingStatus
+      );
+
       let finalStatus = existingStatus;
 
       // Ask for permission if not granted
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
+        console.debug('Updated notification permissions status:', finalStatus);
       }
 
       // If permission not granted, return null
@@ -45,9 +52,11 @@ export class NotificationService {
       const token = await Notifications.getExpoPushTokenAsync({
         projectId: 'bc10a2e3-a404-4a22-9b52-4bfe1619a96c', // Replace with your actual project ID
       });
+      console.debug('Expo push token received:', token.data);
 
       // Configure notification channel for Android
       if (Platform.OS === 'android') {
+        console.debug('Configuring Android notification channel...');
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
           importance: Notifications.AndroidImportance.MAX,
@@ -67,11 +76,14 @@ export class NotificationService {
    * Send Expo push token to the backend
    */
   static async sendTokenToBackend(token: string): Promise<boolean> {
+    console.debug('Sending Expo push token to backend:', token);
     try {
       const response = await fetchApi('/profile/add_expo_token', {
         method: 'POST',
         body: JSON.stringify({ token }),
       });
+
+      console.debug('Backend response status:', response.statusCode);
 
       if (!response.ok) {
         throw new ApiError(
@@ -91,25 +103,37 @@ export class NotificationService {
   /**
    * Initialize notifications - register and send token to backend
    */
-  static async initializeNotifications(): Promise<boolean> {
+  static async initializeNotifications(): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    console.debug('Initializing notifications...');
     try {
       // Register for push notifications
       const token = await this.registerForPushNotifications();
 
       if (!token) {
         console.warn('No Expo push token received');
-        return false;
+        return { success: false, error: 'No Expo push token received' };
       }
 
-      console.log('Expo push token:', token);
+      console.debug('Expo push token to be sent to backend:', token);
 
       // Send token to backend
       const success = await this.sendTokenToBackend(token);
 
-      return success;
+      console.debug('Notification initialization success:', success);
+      return {
+        success,
+        error: success ? undefined : 'Failed to send token to backend',
+      };
     } catch (error) {
       console.error('Error initializing notifications:', error);
-      return false;
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      };
     }
   }
 
@@ -119,6 +143,7 @@ export class NotificationService {
   static addNotificationReceivedListener(
     callback: (notification: Notifications.Notification) => void
   ) {
+    console.debug('Adding notification received listener...');
     return Notifications.addNotificationReceivedListener(callback);
   }
 
@@ -128,6 +153,7 @@ export class NotificationService {
   static addNotificationResponseReceivedListener(
     callback: (response: Notifications.NotificationResponse) => void
   ) {
+    console.debug('Adding notification response received listener...');
     return Notifications.addNotificationResponseReceivedListener(callback);
   }
 
@@ -137,6 +163,7 @@ export class NotificationService {
   static removeNotificationSubscription(
     subscription: Notifications.Subscription
   ) {
+    console.debug('Removing notification subscription...');
     subscription.remove();
   }
 }

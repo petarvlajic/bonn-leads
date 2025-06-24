@@ -8,14 +8,15 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Job Lead Management</Text>
+        <Text style={styles.title}>Job Lead Verwaltung</Text>
         <Text style={styles.subtitle}>
-          Manage your job leads efficiently and keep track of assignments
+          Verwalten Sie Ihre Job-Leads effizient und behalten Sie den Überblick
+          über Aufgaben
         </Text>
         <View style={styles.buttonContainer}>
           <Link href="/(auth)/login" asChild>
             <Button
-              title="Login"
+              title="Anmelden"
               variant="primary"
               fullWidth
               style={styles.button}
@@ -23,7 +24,7 @@ export default function WelcomeScreen() {
           </Link>
           <Link href="/(auth)/register" asChild>
             <Button
-              title="Register"
+              title="Registrieren"
               variant="outline"
               fullWidth
               style={styles.button}

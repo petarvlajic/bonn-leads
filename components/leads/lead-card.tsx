@@ -21,11 +21,71 @@ import {
   shadows,
 } from '../../styles/theme';
 import { Lead } from '../../types';
-import {
-  Assignee,
-  LEAD_STATUSES,
+import { Assignee, LeadStatusNumber } from '@/services/leads.service';
+
+// Updated status mapping to match backend expectations
+const STATUS_NUMBER_MAP: Record<
   LeadStatusNumber,
-} from '@/services/leads.service';
+  { label: string; apiValue: string }
+> = {
+  1: { label: 'Pending', apiValue: 'pending' },
+  2: { label: 'Lead Assigned', apiValue: 'lead_assigned' },
+  3: { label: 'Lead Not Reached', apiValue: 'lead_not_reached' },
+  4: { label: 'Lead Not Relevant', apiValue: 'lead_not_relevant' },
+  5: { label: 'Meeting Arranged', apiValue: 'meeting_arranged' },
+  6: { label: 'Job Shadowing/Hiring', apiValue: 'job_shadowing_hiring' },
+} as const;
+
+// Updated status colors to match backend status names
+const STATUS_COLORS = {
+  pending: '#9CA3AF', // Gray for pending
+  lead_assigned: '#FFC107', // Yellow
+  lead_not_reached: '#FF9800', // Orange
+  lead_not_relevant: '#F44336', // Red
+  meeting_arranged: '#2196F3', // Blue
+  job_shadowing_hiring: '#4CAF50', // Green
+} as const;
+
+const STATUS_BACKGROUND_COLORS = {
+  pending: '#F3F4F6',
+  lead_assigned: '#FFF8E1',
+  lead_not_reached: '#FFF3E0',
+  lead_not_relevant: '#FFEBEE',
+  meeting_arranged: '#E3F2FD',
+  job_shadowing_hiring: '#E8F5E8',
+  completed: '#E8F5E8',
+} as const;
+
+// Helper function to get status color
+const getStatusColor = (status: string | number): string => {
+  let statusStr: string;
+
+  if (typeof status === 'number') {
+    const statusObj = STATUS_NUMBER_MAP[status as LeadStatusNumber];
+    statusStr = statusObj ? statusObj.apiValue : 'pending';
+  } else {
+    statusStr = status.toLowerCase().replace(/\s+/g, '_');
+  }
+
+  return STATUS_COLORS[statusStr as keyof typeof STATUS_COLORS] || '#9CA3AF';
+};
+
+// Helper function to get status background color (lighter version)
+const getStatusBackgroundColor = (status: string | number): string => {
+  let statusStr: string;
+  if (typeof status === 'number') {
+    const statusObj = STATUS_NUMBER_MAP[status as LeadStatusNumber];
+    statusStr = statusObj ? statusObj.apiValue : 'pending';
+  } else {
+    statusStr = status.toLowerCase().replace(/\s+/g, '_');
+  }
+
+  return (
+    STATUS_BACKGROUND_COLORS[
+      statusStr as keyof typeof STATUS_BACKGROUND_COLORS
+    ] || '#F3F4F6'
+  );
+};
 
 interface LeadCardProps {
   lead: Lead;
@@ -39,6 +99,10 @@ interface LeadCardProps {
   onUnassignLead?: () => void; // Optional for admin
   onNotify?: () => void; // Optional for admin
   onCall?: () => void; // Optional for regular user
+  StatusBadge?: React.ComponentType<{ status: string }>; // Optional StatusBadge component from parent
+  getStatusColor?: (status: string) => string; // Optional color function from parent
+  getStatusBackgroundColor?: (status: string) => string; // Optional background color function from parent
+  statusFilterMap?: any; // Optional status mapping from parent (not used anymore)
 }
 
 const LeadCard: React.FC<LeadCardProps> = ({
@@ -53,6 +117,9 @@ const LeadCard: React.FC<LeadCardProps> = ({
   onUnassignLead,
   onNotify,
   onCall,
+  StatusBadge,
+  getStatusColor: parentGetStatusColor,
+  getStatusBackgroundColor: parentGetStatusBackgroundColor,
 }) => {
   const [showAssigneeModal, setShowAssigneeModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -60,47 +127,20 @@ const LeadCard: React.FC<LeadCardProps> = ({
   const isAdmin = mode === 'admin';
   const isUser = mode === 'user';
 
-  const getStatusColor = (status: string | number) => {
-    // Handle both string and number status
-    let statusStr: string;
-
-    if (typeof status === 'number') {
-      const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
-      statusStr = statusObj
-        ? statusObj.label.toLowerCase().replace(/_/g, ' ')
-        : 'unknown';
-    } else {
-      statusStr = status.toLowerCase().replace(/_/g, ' ');
-    }
-
-    switch (statusStr) {
-      case 'pending':
-        return '#FFC107'; // Yellow
-      case 'finished':
-        return colors.success || '#28A745'; // Green
-      case 'lead contacted':
-      case 'contacted':
-        return '#17A2B8'; // Blue
-      case 'waiting recall':
-      case 'waiting for recall':
-        return '#FD7E14'; // Orange
-      case 'interview arranged':
-        return '#6F42C1'; // Purple
-      case 'lead assigned':
-        return '#007BFF'; // Blue
-      case 'not interested':
-        return colors.error || '#DC3545'; // Red
-      default:
-        return colors.textSecondary;
-    }
-  };
+  // Use parent functions if provided, otherwise use local functions
+  const finalGetStatusColor = parentGetStatusColor || getStatusColor;
+  const finalGetStatusBackgroundColor =
+    parentGetStatusBackgroundColor || getStatusBackgroundColor;
 
   const getStatusLabel = (status: string | number): string => {
     if (typeof status === 'number') {
-      const statusObj = LEAD_STATUSES[status as LeadStatusNumber];
-      return statusObj ? statusObj.label.replace(/_/g, ' ') : 'Unknown';
+      const statusObj = STATUS_NUMBER_MAP[status as LeadStatusNumber];
+      return statusObj ? statusObj.label : 'Unknown';
     }
-    return status.replace(/_/g, ' ');
+
+    // For string status, format it properly
+    if (!status) return 'Unknown';
+    return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   const handleAssigneeSelect = (assigneeId: number) => {
@@ -110,19 +150,26 @@ const LeadCard: React.FC<LeadCardProps> = ({
     setShowAssigneeModal(false);
   };
 
+  const handleStatusSelect = (statusNumber: LeadStatusNumber) => {
+    if (onStatusChange) {
+      onStatusChange(statusNumber);
+    }
+    setShowStatusModal(false);
+  };
+
   const handleUnassign = () => {
     Alert.alert(
-      'Unassign Lead',
-      `Are you sure you want to unassign ${
-        lead.assignee?.name || 'this assignee'
-      } from this lead?`,
+      'Lead-Zuweisung aufheben',
+      `Möchten Sie wirklich ${
+        lead.assignee?.name || 'diesen Zuweisungspartner'
+      } von diesem Lead entfernen?`,
       [
         {
-          text: 'Cancel',
+          text: 'Abbrechen',
           style: 'cancel',
         },
         {
-          text: 'Unassign',
+          text: 'Entfernen',
           style: 'destructive',
           onPress: () => {
             if (onUnassignLead) {
@@ -132,13 +179,6 @@ const LeadCard: React.FC<LeadCardProps> = ({
         },
       ]
     );
-  };
-
-  const handleStatusSelect = (statusNumber: LeadStatusNumber) => {
-    if (onStatusChange) {
-      onStatusChange(statusNumber);
-    }
-    setShowStatusModal(false);
   };
 
   const renderAssigneeModal = () => (
@@ -151,7 +191,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Assign Lead</Text>
+            <Text style={styles.modalTitle}>Lead zuweisen</Text>
             <TouchableOpacity onPress={() => setShowAssigneeModal(false)}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
@@ -167,55 +207,22 @@ const LeadCard: React.FC<LeadCardProps> = ({
                 >
                   <View style={styles.assigneeInfo}>
                     <View style={styles.assigneeAvatar}>
-                      {assignee?.avatar_url ? (
-                        <Image
-                          source={{ uri: assignee?.avatar_url }}
-                          style={styles.avatarImage}
-                        />
+                      {assignee.first_name && assignee.last_name ? (
+                        <Text style={styles.avatarText}>
+                          {assignee.first_name.charAt(0) +
+                            assignee.last_name.charAt(0)}
+                        </Text>
                       ) : (
                         <Text style={styles.avatarText}>
-                          {(() => {
-                            // Check if assignee has proper first/last name
-                            if (assignee.first_name && assignee.last_name) {
-                              return `${assignee.first_name.charAt(
-                                0
-                              )}${assignee.last_name.charAt(0)}`.toUpperCase();
-                            }
-                            // If only one name is available
-                            if (assignee.first_name) {
-                              return assignee.first_name
-                                .charAt(0)
-                                .toUpperCase();
-                            }
-                            if (assignee.last_name) {
-                              return assignee.last_name.charAt(0).toUpperCase();
-                            }
-                            // Fallback to email from user object
-                            const email = assignee.user?.email || '';
-                            return email.charAt(0).toUpperCase();
-                          })()}
+                          {assignee.id.toString()}
                         </Text>
                       )}
                     </View>
                     <View style={styles.assigneeDetails}>
                       <Text style={styles.assigneeName}>
-                        {(() => {
-                          // Build name from first_name and last_name
-                          const firstName = assignee.first_name || '';
-                          const lastName = assignee.last_name || '';
-                          const fullName = `${firstName} ${lastName}`.trim();
-
-                          // If we have a proper name, use it
-                          if (fullName) {
-                            return fullName;
-                          }
-
-                          // Fallback to email from user object
-                          return assignee.user?.email || 'Unknown User';
-                        })()}
-                      </Text>
-                      <Text style={styles.assigneeEmail}>
-                        {assignee.user?.email || ''}
+                        {assignee.first_name && assignee.last_name
+                          ? `${assignee.first_name} ${assignee.last_name}`
+                          : `User ${assignee.id}`}
                       </Text>
                     </View>
                   </View>
@@ -243,7 +250,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Change Status</Text>
+            <Text style={styles.modalTitle}>Status ändern</Text>
             <TouchableOpacity onPress={() => setShowStatusModal(false)}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
@@ -251,18 +258,21 @@ const LeadCard: React.FC<LeadCardProps> = ({
 
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.statusList}>
-              {Object.entries(LEAD_STATUSES).map(([number, statusObj]) => {
+              {Object.entries(STATUS_NUMBER_MAP).map(([number, statusObj]) => {
                 const statusNumber = Number(number) as LeadStatusNumber;
                 const currentStatusLabel = getStatusLabel(lead.status);
-                const isCurrentStatus =
-                  currentStatusLabel === statusObj.label.replace(/_/g, ' ');
+                const isCurrentStatus = currentStatusLabel === statusObj.label;
 
                 return (
                   <TouchableOpacity
                     key={number}
                     style={[
                       styles.statusItem,
-                      isCurrentStatus && styles.statusItemActive,
+                      isCurrentStatus && {
+                        backgroundColor: finalGetStatusBackgroundColor(
+                          statusObj.apiValue
+                        ),
+                      },
                     ]}
                     onPress={() => handleStatusSelect(statusNumber)}
                   >
@@ -270,23 +280,30 @@ const LeadCard: React.FC<LeadCardProps> = ({
                       <View
                         style={[
                           styles.statusIndicator,
-                          { backgroundColor: getStatusColor(statusNumber) },
+                          {
+                            backgroundColor: finalGetStatusColor(
+                              statusObj.apiValue
+                            ),
+                          },
                         ]}
                       />
                       <Text
                         style={[
                           styles.statusLabel,
-                          isCurrentStatus && styles.statusLabelActive,
+                          isCurrentStatus && {
+                            color: finalGetStatusColor(statusObj.apiValue),
+                            fontWeight: fontWeights.medium as any,
+                          },
                         ]}
                       >
-                        {statusObj.label.replace(/_/g, ' ')}
+                        {statusObj.label}
                       </Text>
                     </View>
                     {isCurrentStatus && (
                       <Ionicons
                         name="checkmark"
                         size={20}
-                        color={colors.primary}
+                        color={finalGetStatusColor(statusObj.apiValue)}
                       />
                     )}
                   </TouchableOpacity>
@@ -326,16 +343,16 @@ const LeadCard: React.FC<LeadCardProps> = ({
         }
       } else {
         Alert.alert(
-          'Unable to make call',
-          'Your device does not support phone calls or the phone number is invalid.',
+          'Anruf nicht möglich',
+          'Ihr Gerät unterstützt keine Anrufe oder die Telefonnummer ist ungültig.',
           [{ text: 'OK' }]
         );
       }
     } catch (error) {
       console.error('Error making phone call:', error);
       Alert.alert(
-        'Call Failed',
-        'Unable to initiate phone call. Please try again.',
+        'Anruf fehlgeschlagen',
+        'Anruf konnte nicht gestartet werden. Bitte versuchen Sie es erneut.',
         [{ text: 'OK' }]
       );
     }
@@ -351,16 +368,16 @@ const LeadCard: React.FC<LeadCardProps> = ({
         await Linking.openURL(emailUrl);
       } else {
         Alert.alert(
-          'Unable to open email',
-          'No email app is available on your device.',
+          'E-Mail nicht möglich',
+          'Auf Ihrem Gerät ist keine E-Mail-App verfügbar.',
           [{ text: 'OK' }]
         );
       }
     } catch (error) {
       console.error('Error opening email:', error);
       Alert.alert(
-        'Email Failed',
-        'Unable to open email app. Please try again.',
+        'E-Mail fehlgeschlagen',
+        'E-Mail-App konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.',
         [{ text: 'OK' }]
       );
     }
@@ -371,9 +388,12 @@ const LeadCard: React.FC<LeadCardProps> = ({
       <TouchableOpacity onPress={onToggleExpand} style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.nameContainer}>
-            <Text style={styles.name} numberOfLines={2}>
-              {name}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={2}>
+                {name}
+              </Text>
+              <Text style={styles.leadId}>#{lead.id}</Text>
+            </View>
             <View style={styles.typeContainer}>
               <Ionicons
                 name={getTypeIcon(lead.type)}
@@ -388,16 +408,23 @@ const LeadCard: React.FC<LeadCardProps> = ({
         </View>
 
         <View style={styles.headerRight}>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(lead.status) },
-            ]}
-          >
-            <Text style={styles.statusText} numberOfLines={2}>
-              {getStatusLabel(lead.status)}
-            </Text>
-          </View>
+          {StatusBadge ? (
+            <StatusBadge status={lead.status} />
+          ) : (
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: finalGetStatusColor(lead.status),
+                  borderColor: finalGetStatusColor(lead.status),
+                },
+              ]}
+            >
+              <Text style={styles.statusText} numberOfLines={2}>
+                {getStatusLabel(lead.status)}
+              </Text>
+            </View>
+          )}
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={20}
@@ -460,17 +487,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                       color={colors.textSecondary}
                     />
                     <Text style={styles.infoText} numberOfLines={2}>
-                      Assigned to:{' '}
-                      {(() => {
-                        const firstName = lead.assignee.first_name || '';
-                        const lastName = lead.assignee.last_name || '';
-                        const fullName = `${firstName} ${lastName}`.trim();
-                        return (
-                          fullName ||
-                          lead.assignee.user?.email ||
-                          'Unknown User'
-                        );
-                      })()}
+                      Assigned to: {lead.assignee?.name || 'Unknown User'}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -482,7 +499,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                       size={16}
                       color={colors.error}
                     />
-                    <Text style={styles.unassignText}>Unassign</Text>
+                    <Text style={styles.unassignText}>Entfernen</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -496,7 +513,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                     color={colors.primary}
                   />
                   <Text style={[styles.infoText, styles.assignText]}>
-                    Tap to assign
+                    Tippen, um zuzuweisen
                   </Text>
                 </TouchableOpacity>
               )}
@@ -506,7 +523,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
           <View style={styles.infoRow}>
             <Ionicons name="time" size={16} color={colors.textSecondary} />
             <Text style={styles.infoText} numberOfLines={1}>
-              Created: {new Date(lead.created_at).toLocaleDateString()}
+              Erstellt: {new Date(lead.created_at).toLocaleDateString()}
             </Text>
           </View>
 
@@ -519,7 +536,7 @@ const LeadCard: React.FC<LeadCardProps> = ({
                   onPress={handleCall}
                 >
                   <Ionicons name="call" size={16} color={colors.white} />
-                  <Text style={styles.actionButtonText}>Call</Text>
+                  <Text style={styles.actionButtonText}>Anrufen</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -527,11 +544,14 @@ const LeadCard: React.FC<LeadCardProps> = ({
                   onPress={handleEmail}
                 >
                   <Ionicons name="mail" size={16} color={colors.white} />
-                  <Text style={styles.actionButtonText}>Email</Text>
+                  <Text style={styles.actionButtonText}>E-Mail</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.statusButton]}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: finalGetStatusColor(lead.status) },
+                  ]}
                   onPress={() => setShowStatusModal(true)}
                 >
                   <Ionicons
@@ -555,11 +575,14 @@ const LeadCard: React.FC<LeadCardProps> = ({
                     size={16}
                     color={colors.white}
                   />
-                  <Text style={styles.actionButtonText}>Notify</Text>
+                  <Text style={styles.actionButtonText}>Benachrichtigen</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.statusButton]}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: finalGetStatusColor(lead.status) },
+                  ]}
                   onPress={() => setShowStatusModal(true)}
                 >
                   <Ionicons
@@ -602,12 +625,21 @@ const styles = StyleSheet.create({
   nameContainer: {
     flexDirection: 'column',
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   name: {
     fontSize: fontSizes.lg,
     fontWeight: fontWeights.bold as any,
     color: colors.text,
     marginBottom: spacing.xs,
     flexWrap: 'wrap',
+  },
+  leadId: {
+    fontSize: fontSizes.sm,
+    color: colors.textSecondary,
+    marginLeft: spacing.xs,
   },
   typeContainer: {
     flexDirection: 'row',
@@ -632,6 +664,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
     maxWidth: 120,
+    borderWidth: 1,
   },
   statusText: {
     fontSize: fontSizes.xs,
@@ -775,9 +808,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  statusItemActive: {
-    backgroundColor: colors.primary + '10', // Add transparency
-  },
   statusInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -792,10 +822,6 @@ const styles = StyleSheet.create({
   statusLabel: {
     fontSize: fontSizes.md,
     color: colors.text,
-  },
-  statusLabelActive: {
-    fontWeight: fontWeights.medium as any,
-    color: colors.primary,
   },
   actions: {
     flexDirection: 'row',
@@ -820,9 +846,6 @@ const styles = StyleSheet.create({
   },
   notifyButton: {
     backgroundColor: colors.primary,
-  },
-  statusButton: {
-    backgroundColor: '#FFC107', // fallback warning color
   },
   actionButtonText: {
     color: colors.white,
